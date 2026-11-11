@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Khu Vực Quản Trị Admin - J2ME Cloud 24/7 Duy Trường</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    body {
+      background: #070b14;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+    .admin-container {
+      max-width: 1320px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .admin-grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 16px;
+    }
+    .admin-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .stat-card {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+      font-size: 13px;
+    }
+    th {
+      color: #94a3b8;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body class="cyber-os">
+  <!-- Màn hình cảnh báo 403 nếu không phải Admin -->
+  <div id="adminForbiddenBox" style="display:none; max-width:520px; margin:80px auto; text-align:center;" class="glass-panel">
+    <div style="font-size:42px;">🚫</div>
+    <h2 style="color:#f87171; margin:8px 0;">403 FORBIDDEN — TRUY CẬP BỊ TỪ CHỐI</h2>
+    <p style="font-size:14px; color:#cbd5e1;">
+      Tài khoản <strong>User</strong> không được phép truy cập bất kỳ trang, menu hay API nào của <strong>Admin</strong>.
+    </p>
+    <a href="/app" class="cyber-btn emerald" style="display:inline-block; margin-top:12px; text-decoration:none;">
+      🎮 Quay Về Khu Vực Người Chơi (/app)
+    </a>
+  </div>
+
+  <!-- Nội dung chính của Admin (chỉ hiển thị khi xác thực đúng role === 'admin') -->
+  <div id="adminMainWorkspace" class="admin-container" style="display:none;">
+    <header class="glass-panel" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-color:rgba(245,158,11,0.5);">
+      <div>
+        <div class="vip-crown-badge">👑 PORTAL QUẢN TRỊ VIÊN TOÀN QUYỀN (ADMIN BRANCH)</div>
+        <h1 style="font-size:20px; color:#fbbf24; margin:6px 0 2px 0;">
+          Trung Tâm Kiểm Soát Web &amp; App 24/7 — Nguyễn Đức Duy Trường
+        </h1>
+        <div style="font-size:12px; color:#94a3b8;" id="adminHeaderStatus">
+          Đang kiểm tra phiên Mạng Kép &amp; quyền Admin...
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a href="/app" class="cyber-btn emerald" style="text-decoration:none;">
+          🎮 Vào Khu Vực Người Chơi (/app) Để Test Game
+        </a>
+        <a href="/j2meweb-duytruong-247.zip" download="j2meweb-duytruong-247.zip" class="cyber-btn" style="border-color:#38bdf8; color:#38bdf8; text-decoration:none;">
+          📦 Tải Web Server (.ZIP)
+        </a>
+        <button class="cyber-btn primary" id="refreshAdminBtn">
+          🔄 Làm Mới Toàn Bộ
+        </button>
+        <button class="cyber-btn danger" id="btnAdminLogout">
+          🚪 Đăng Xuất
+        </button>
+      </div>
+    </header>
+
+    <!-- 1. CÀI ĐẶT SỰ KIỆN KHUYẾN MÃI & X2 NẠP QR TECHCOMBANK (ĐỒNG BỘ WEB + APP) -->
+    <section class="glass-panel" style="border-color:rgba(245,158,11,0.45);">
+      <h2 style="font-size:16px; color:#fbbf24; margin:0 0 10px 0;">
+        🎁 1. Cài Đặt Sự Kiện Khuyến Mãi &amp; Tri Ân Khách Hàng (Đồng Bộ Tức Thì Web + App)
+      </h2>
+      <div class="admin-grid-2" style="margin-bottom:10px;">
+        <div>
+          <label style="font-size:12px; color:#94a3b8;">Tiêu đề Sự kiện:</label>
+          <input type="text" id="adminEventTitle" class="cyber-btn" style="width:100%; margin-top:4px;" value="🎉 SỰ KIỆN TRI ÂN KHÁCH HÀNG DUY TRƯỜNG" />
+        </div>
+        <div>
+          <label style="font-size:12px; color:#94a3b8;">Nội dung Banner chạy trên Web &amp; App:</label>
+          <input type="text" id="adminEventBanner" class="cyber-btn" style="width:100%; margin-top:4px;" value="🔥 Khuyến mãi X2 nạp tiền QR Techcombank & Bảng giá 1 ngày 3k, 1 tuần 15k, 1 tháng 40k!" />
+        </div>
+      </div>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+        <label style="font-size:13px;">Giảm giá gói thuê (%):
+          <input type="number" id="adminDiscountPct" value="0" min="0" max="90" class="cyber-btn" style="width:72px;" />
+        </label>
+        <label style="font-size:13px;">Hệ số nhân giá nạp QR (VD: 2 = X2):
+          <input type="number" id="adminTopupMult" value="2" step="0.5" min="1" max="10" class="cyber-btn" style="width:72px;" />
+        </label>
+        <label style="font-size:13px;">
+          <input type="checkbox" id="adminEventActive" checked /> Bật Sự Kiện
+        </label>
+        <button class="cyber-btn emerald" id="btnSaveAdminEvent">
+          💾 Lưu Cấu Hình Sự Kiện Toàn Hệ Thống
+        </button>
+      </div>
+    </section>
+
+    <!-- 2. DUYỆT ĐƠN NẠP QR TECHCOMBANK & ĐƠN ĐĂNG KÝ THUÊ 24/7 / UP THUÊ -->
+    <div class="admin-grid-2">
+      <section class="glass-panel">
+        <h2 style="font-size:15px; color:#38bdf8; margin:0 0 8px 0;">
+          🏦 2. Duyệt Đơn Nạp QR Techcombank (9823042007 - NGUYỄN ĐỨC DUY TRƯỜNG)
+        </h2>
+        <div id="adminTopupOrdersBox" style="max-height:280px; overflow-y:auto; font-size:12px;">
+          Đang tải danh sách đơn nạp QR...
+        </div>
+      </section>
+
+      <section class="glass-panel">
+        <h2 style="font-size:15px; color:#10b981; margin:0 0 8px 0;">
+          ⚡ 3. Đơn Thuê 24/7 &amp; Up Thuê (Kèm TK/MK Game Khách Hàng Gửi)
+        </h2>
+        <div id="adminServiceOrdersBox" style="max-height:280px; overflow-y:auto; font-size:12px;">
+          Đang tải danh sách đơn thuê 24/7 &amp; Up thuê...
+        </div>
+      </section>
+    </div>
+
+    <!-- 3. GIÁM SÁT PHIÊN MẠNG KÉP (DUAL-CONNECTION GRACE PERIOD) & VÍ NGƯỜI DÙNG -->
+    <div class="admin-grid-2">
+      <section class="glass-panel">
+        <h2 style="font-size:15px; color:#a855f7; margin:0 0 8px 0;">
+          🛡️ 4. Phiên Mạng Kép (Dual-Connection Grace Period 30 Phút &amp; Refresh Token)
+        </h2>
+        <div id="adminDualSessionsBox" style="max-height:240px; overflow-y:auto; font-size:12px;">
+          Đang tải danh sách phiên Mạng Kép...
+        </div>
+      </section>
+
+      <section class="glass-panel">
+        <h2 style="font-size:15px; color:#fbbf24; margin:0 0 8px 0;">
+          💰 5. Quản Lý Ví &amp; Cấp Hạn VIP 24/7 Nhanh (Web + App)
+        </h2>
+        <div id="adminUsersHeartbeatList" style="max-height:240px; overflow-y:auto; font-size:12px;">
+          Đang tải danh sách ví người dùng...
+        </div>
+      </section>
+    </div>
+
+    <!-- 4. TRẠNG THÁI MÁY CHỦ, CCU & QUẢN LÝ TÀI KHOẢN HỆ THỐNG -->
+    <section class="glass-panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+        <h2 style="font-size:15px; color:#10b981; margin:0;">
+          🖥️ 6. Trạng Thái Máy Chủ, CCU &amp; Danh Sách Tài Khoản
+        </h2>
+        <form id="concurrencyForm" style="display:flex; align-items:center; gap:8px;">
+          <label for="maxConcurrentInput" style="font-size:12px; color:#94a3b8;">Giới hạn CCU:</label>
+          <input type="number" id="maxConcurrentInput" min="1" max="1000" value="50" class="cyber-btn" style="width:80px;" required />
+          <button type="submit" class="cyber-btn emerald">Cập nhật CCU</button>
+        </form>
+      </div>
+
+      <div id="systemStats" class="admin-stat-grid" style="margin-bottom:14px;"></div>
+
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Tài khoản</th>
+              <th>Vai trò (Role)</th>
+              <th>Số Máy Ảo</th>
+              <th>Dung lượng</th>
+              <th>Trạng thái</th>
+              <th>Hành động</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script src="/js/shared/dualConnectionClient.js"></script>
+  <script src="/js/admin/adminApp.js"></script>
+</body>
+</html>

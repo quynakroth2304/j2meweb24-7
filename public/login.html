@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng Nhập - J2ME Cloud</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0B0B13;
+            --panel-bg: rgba(21, 21, 33, 0.85);
+            --primary: #06b6d4;
+        }
+
+        * {
+            box-sizing: border-box;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 16px;
+            min-height: 100vh;
+            background: var(--bg-deep);
+            color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-card {
+            background: var(--panel-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 24px;
+            padding: 32px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(6, 182, 212, 0.15);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        h2 {
+            margin: 0 0 4px;
+            color: var(--primary);
+            font-size: 22px;
+            text-align: center;
+        }
+
+        p {
+            margin: 0 0 12px;
+            font-size: 13px;
+            color: #94a3b8;
+            text-align: center;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #cbd5e1;
+        }
+
+        input {
+            background: rgba(8, 12, 22, 0.9);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 11px 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.25);
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #0284c7, #06b6d4);
+            color: #fff;
+            border: none;
+            padding: 12px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            margin-top: 8px;
+            box-shadow: 0 6px 20px rgba(6, 182, 212, 0.3);
+            transition: 0.15s ease;
+        }
+
+        .btn-submit:hover {
+            filter: brightness(1.1);
+            transform: translateY(-2px);
+        }
+
+        .error-msg {
+            color: #fb7185;
+            font-size: 12px;
+            text-align: center;
+            min-height: 16px;
+        }
+
+        .switch-mode {
+            text-align: center;
+            font-size: 12.5px;
+            color: #94a3b8;
+        }
+
+        .switch-mode a {
+            color: #38bdf8;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-card">
+        <h2 id="formTitle">J2ME Cloud Portal</h2>
+        <p id="formSubtitle">Đăng nhập hệ thống để quản lý máy ảo & chơi game 24/7</p>
+
+        <div class="form-group">
+            <label>Tài khoản</label>
+            <input type="text" id="username" placeholder="Nhập admin hoặc tên tài khoản...">
+        </div>
+        <div class="form-group">
+            <label>Mật khẩu</label>
+            <input type="password" id="password" placeholder="Nhập mật khẩu (tối thiểu 4 ký tự)...">
+        </div>
+        <div class="error-msg" id="errorMsg"></div>
+        <button class="btn-submit" id="submitBtn" onclick="submitAuth()">Đăng Nhập Ngay</button>
+
+        <div class="switch-mode">
+            <span id="switchPrompt">Chưa có tài khoản?</span>
+            <a onclick="toggleMode()" id="switchAction">Đăng ký mới</a>
+        </div>
+
+        <a href="/terms.html"
+            style="text-align: center; font-size: 11px; color: #64748b; text-decoration: none; margin-top: 4px;">Điều
+            khoản & Bản quyền</a>
+    </div>
+
+    <script>
+        let isRegister = false;
+
+        function toggleMode() {
+            isRegister = !isRegister;
+            document.getElementById('formTitle').innerText = isRegister ? 'Đăng Ký Tài Khoản' : 'J2ME Cloud Portal';
+            document.getElementById('formSubtitle').innerText = isRegister
+                ? 'Tạo tài khoản mới và nhận ngay Máy Ảo J2ME 24/7'
+                : 'Đăng nhập hệ thống để quản lý máy ảo & chơi game 24/7';
+            document.getElementById('submitBtn').innerText = isRegister ? 'Tạo Tài Khoản' : 'Đăng Nhập Ngay';
+            document.getElementById('switchPrompt').innerText = isRegister ? 'Đã có tài khoản?' : 'Chưa có tài khoản?';
+            document.getElementById('switchAction').innerText = isRegister ? 'Đăng nhập' : 'Đăng ký mới';
+            document.getElementById('errorMsg').innerText = '';
+        }
+
+        async function submitAuth() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const errorMsgEl = document.getElementById('errorMsg');
+
+            errorMsgEl.innerText = '';
+
+            if (!username || !password) {
+                errorMsgEl.innerText = 'Vui lòng nhập đầy đủ tài khoản và mật khẩu.';
+                return;
+            }
+
+            const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await res.json();
+                if (!res.ok) {
+                    errorMsgEl.innerText = data.error || 'Thao tác thất bại';
+                    return;
+                }
+
+                localStorage.setItem('j2me_user', JSON.stringify(data.user));
+                window.location.href = '/dashboard.html';
+            } catch (err) {
+                errorMsgEl.innerText = 'Lỗi kết nối đến máy chủ.';
+                console.error(err);
+            }
+        }
+
+        document.getElementById('password').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                submitAuth();
+            }
+        });
+    </script>
+</body>
+
+</html>

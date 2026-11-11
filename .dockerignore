@@ -1,0 +1,9 @@
+node_modules/
+data/
+logs/
+backups/
+*.sqlite
+*.sqlite3
+.env
+.DS_Store
+emulator/*.tmp*

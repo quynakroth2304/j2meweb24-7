@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>HSO Cloud Phone OS 24/7 &amp; Multi-Account Gateway</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="cyber-os">
+
+  <!-- THANH DOCK ĐA TÀI KHOẢN (MULTI-ACCOUNT SWITCHER BAR - ZERO RELOAD < 50ms) -->
+  <header class="multi-account-dock" id="multiAccountDock">
+    <!-- Được render tự động bởi player.js -->
+  </header>
+
+  <main class="cloud-workspace">
+    <!-- CỘT TRÁI: KHUNG MÁY ẢO CLOUD PHONE & BÀN PHÍM TƯƠNG TÁC -->
+    <section class="glass-panel phone-stage">
+      <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+        <div>
+          <span class="vip-crown-badge" id="vipBadgeHeader">👑 VIP ADMIN • Duy Trường</span>
+          <div style="font-size:12px; color:#94a3b8; margin-top:4px;" id="activeSlotLabel">
+            Slot #1 • Grace Period: 120s (RingBuffer 64KB)
+          </div>
+        </div>
+        <button class="cyber-btn" id="btnToggleScreenSaver" title="Tắt vẽ 30FPS để tiết kiệm 80% RAM/Pin nhưng vẫn giữ 100% Auto &amp; Mạng">
+          🌙 Tắt Màn Treo (RENDER:0)
+        </button>
+      </div>
+
+      <!-- KHUNG MÀN HÌNH 240x320 ĐA PHIÊN (GIỮ SỐNG TRONG DOM) -->
+      <div class="viewport-container" id="viewportContainer">
+        <div id="vmInstancesHost"></div>
+        <div class="screen-off-overlay" id="screenOffOverlay" style="display:none;">
+          <div style="font-size:28px;">⚡</div>
+          <div style="font-weight:700; color:#38bdf8;">CHẾ ĐỘ TREO TẮT MÀN HÌNH (RENDER:0)</div>
+          <div style="font-size:12px; color:#94a3b8;">
+            Đã ngắt vẽ GPU 30FPS (Tiết kiệm 80% Pin/RAM).<br/>
+            Luồng TCP Relay &amp; Auto Nhiệm Vụ Cắm Bãi vẫn chạy 100% tốc độ!
+          </div>
+          <button class="cyber-btn emerald" id="btnWakeScreenNow">Bật Lại Hình Ảnh Ngay (RENDER:1)</button>
+        </div>
+      </div>
+
+      <!-- HÀNG PHÍM BẬT NHANH AUTO QUEST & MENU MOD VIP -->
+      <div style="display:flex; gap:8px; width:100%;">
+        <button class="cyber-btn emerald" style="flex:1;" id="btnQuickAutoQuest">
+          ▶ BẬT AUTO NHIỆM VỤ
+        </button>
+        <button class="cyber-btn primary" style="flex:1;" id="btnOpenInGameVipMenu">
+          👑 Menu Mod VIP
+        </button>
+      </div>
+
+      <!-- SOFTKEYS TRÁI / GIỮA / PHẢI -->
+      <div class="keypad-grid">
+        <button class="cyber-btn" data-key="-6">Chọn (F1)</button>
+        <button class="cyber-btn primary" data-key="-5">OK (Giữa)</button>
+        <button class="cyber-btn" data-key="-7">Đóng (F2)</button>
+      </div>
+
+      <!-- CỤM D-PAD ĐIỀU HƯỚNG -->
+      <div class="keypad-grid">
+        <div></div>
+        <button class="cyber-btn" data-key="-1">▲ Lên</button>
+        <div></div>
+        <button class="cyber-btn" data-key="-3">◀ Trái</button>
+        <button class="cyber-btn emerald" data-key="-5">● Đánh</button>
+        <button class="cyber-btn" data-key="-4">Phải ▶</button>
+        <div></div>
+        <button class="cyber-btn" data-key="-2">▼ Xuống</button>
+        <div></div>
+      </div>
+
+      <!-- CỤM PHÍM KỸ NĂNG & BƠM MÁU 1-9 -->
+      <div class="keypad-grid">
+        <button class="cyber-btn" data-key="49">1 (Skill 1)</button>
+        <button class="cyber-btn" data-key="50">2 (Skill 2)</button>
+        <button class="cyber-btn" data-key="51">3 (Skill 3)</button>
+        <button class="cyber-btn" data-key="52">4 (Skill 4)</button>
+        <button class="cyber-btn" data-key="53">5 (Skill 5)</button>
+        <button class="cyber-btn" data-key="54">6 (Skill 6)</button>
+        <button class="cyber-btn" data-key="55">7 (Bơm HP)</button>
+        <button class="cyber-btn" data-key="56">8 (Nhặt)</button>
+        <button class="cyber-btn" data-key="57">9 (Bơm MP)</button>
+      </div>
+    </section>
+
+    <!-- CỘT PHẢI: TRUNG TÂM DUY TRÌ MẠNG 24/7 + NGĂN KÉO AUTO NHIỆM VỤ CẮM BÃI & VIP -->
+    <section style="display:flex; flex-direction:column; gap:16px;">
+
+      <!-- 1. TRUNG TÂM DUY TRÌ MẠNG 24/7 (NETWORK KEEP-ALIVE HUD) -->
+      <div class="glass-panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h2 style="font-size:17px; color:#38bdf8;">🌐 Trung Tâm Duy Trì Mạng 24/7 (WebSocket ⇄ TCP Relay)</h2>
+            <p style="font-size:12px; color:#94a3b8;">
+              Dedicated Web Worker • Web Locks API • Silent Audio 0dB • Session Grace Period 120s (64KB RingBuffer)
+            </p>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="cyber-btn emerald" id="btnToggleAntiSleep">
+              🛡️ Bất Tử Mạng Ngầm 24/7: LUÔN BẬT (KHÓA BẤT TỬ)
+            </button>
+            <button class="cyber-btn primary" id="btnTogglePipHud">
+              📺 Cửa Sổ Nổi (PiP Mode)
+            </button>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-top:12px;">
+          <div style="background:rgba(15,23,42,0.75); padding:10px; border-radius:12px;">
+            <div style="font-size:11px; color:#94a3b8;">Độ Trễ Relay (Ping)</div>
+            <div style="font-size:18px; font-weight:800; color:#10b981;" id="hudPingValue">16 ms</div>
+          </div>
+          <div style="background:rgba(15,23,42,0.75); padding:10px; border-radius:12px;">
+            <div style="font-size:11px; color:#94a3b8;">Băng Thông TX / RX</div>
+            <div style="font-size:18px; font-weight:800; color:#38bdf8;" id="hudBandwidthValue">0.4 / 1.2 KB/s</div>
+          </div>
+          <div style="background:rgba(15,23,42,0.75); padding:10px; border-radius:12px;">
+            <div style="font-size:11px; color:#94a3b8;">Khôi Phục Phiên (Grace 120s)</div>
+            <div style="font-size:18px; font-weight:800; color:#f59e0b;" id="hudGraceResumes">0 lần (0 văng)</div>
+          </div>
+          <div style="background:rgba(15,23,42,0.75); padding:10px; border-radius:12px;">
+            <div style="font-size:11px; color:#94a3b8;">Đồng Bộ Cloud RMS</div>
+            <button class="cyber-btn" style="width:100%; margin-top:4px; padding:5px;" id="btnSyncCloudRms">
+              ☁️ Đồng Bộ Save Ngay
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. NGĂN KÉO ĐIỀU KHIỂN AUTO NHIỆM VỤ CẮM BÃI, BÁN ĐỒ, TIỀM NĂNG & VIP (KHU VỰC USER) -->
+      <div class="glass-panel">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+          <button class="cyber-btn primary" data-drawer-tab="quest">1. Auto Nhiệm Vụ &amp; Cắm Bãi</button>
+          <button class="cyber-btn" data-drawer-tab="sell">2. Lọc Tự Động Bán Đồ</button>
+          <button class="cyber-btn" data-drawer-tab="potential">3. Tự Cộng Tiềm Năng &amp; Khu</button>
+          <button class="cyber-btn" data-drawer-tab="vip">4. Mở Khóa VIP Crown</button>
+          <button class="cyber-btn emerald" data-drawer-tab="shop">5. 💳 Nạp QR &amp; Thuê 24/7 / Up Thuê</button>
+        </div>
+
+        <!-- BANNER SỰ KIỆN TRI ÂN & TRẠNG THÁI MẠNG KÉP (DUAL-CONNECTION) -->
+        <div style="background:linear-gradient(90deg, rgba(245,158,11,0.18), rgba(16,185,129,0.18)); border:1px solid rgba(245,158,11,0.5); border-radius:12px; padding:10px 12px; margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div>
+              <div style="font-size:13px; font-weight:800; color:#fbbf24;" id="eventBannerTitle">🎉 SỰ KIỆN TRI ÂN KHÁCH HÀNG DUY TRƯỜNG</div>
+              <div style="font-size:12px; color:#f8fafc; margin-top:2px;" id="eventBannerText">
+                🔥 NHÂN ĐÔI (X2) giá trị nạp tiền qua QR Techcombank &amp; Bảng giá thuê 24/7: 1 Ngày 3k • 1 Tuần 15k • 1 Tháng 40k (Tối đa 3 tháng/lần)!
+              </div>
+              <div style="font-size:11px; color:#69f0ae; margin-top:4px;" id="dualNetworkStatusLine">
+                🟢 Mạng Kép (Dual-Connection): Đang kết nối trực tuyến • Hàng đợi Offline: 0 tác vụ
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span style="font-size:12px; color:#38bdf8; font-weight:700;" id="syncUserSummary">👤 Chưa đăng nhập</span>
+              <button class="cyber-btn" id="btnSimulateOfflineToggle" style="padding:5px 10px; font-size:11px;" title="Chuyển đổi giả lập mất mạng / có mạng lại để kiểm thử cơ chế Mạng Kép">
+                📶 Test Mất Mạng (Offline)
+              </button>
+              <a href="/admin" id="btnGoToAdminPortal" class="cyber-btn" style="display:none; border-color:#f59e0b; color:#fbbf24; text-decoration:none; padding:5px 10px; font-size:12px;">
+                👑 Vào Khu Vực Admin (/admin)
+              </a>
+              <a href="/j2meweb-duytruong-247.zip" download="j2meweb-duytruong-247.zip" class="cyber-btn emerald" style="padding:5px 12px; font-size:12px; text-decoration:none; font-weight:700;">
+                📦 Tải Trọn Bộ Web (.ZIP)
+              </a>
+              <button class="cyber-btn primary" id="btnOpenAuthModal" style="padding:5px 10px; font-size:12px;">🔐 Tài Khoản / Đồng Bộ</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 1: AUTO NHIỆM VỤ & CỐ ĐỊNH BÃI QUÁI ĐÔNG NHẤT (n0211) -->
+        <div id="drawerTab_quest" class="drawer-tab-pane">
+          <div style="background:rgba(15,23,42,0.85); padding:12px; border-radius:12px; border:1px solid rgba(16,185,129,0.4); margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:700; color:#10b981;">
+              <span id="aqStatusTitle">TRẠNG THÁI: SẴN SÀNG</span>
+              <span id="aqStatusCoords">Map 1 (0,0) • Lv.1</span>
+            </div>
+            <div style="font-size:13px; color:#f8fafc; margin-top:4px;" id="aqStatusDetail">
+              Đứng cắm chốt cố định tại tâm bãi chuẩn n0211.DEFAULT_LEVEL_SPOTS (&lt;= 36px), xả combo 5-&gt;4-&gt;3-&gt;2-&gt;1
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+            <div>
+              <label style="font-size:12px; color:#94a3b8;">Chế Độ Lọc Nhiệm Vụ:</label>
+              <select id="selectAqFilter" class="cyber-btn" style="width:100%; margin-top:4px;">
+                <option value="all">Tất cả NV (Chính + Phụ)</option>
+                <option value="main">Chỉ NV Chính Tuyến</option>
+                <option value="sub">Chỉ NV Phụ Tuyến</option>
+                <option value="farm">Chỉ Cày Bãi Cố Định Theo Lv (n0211)</option>
+                <option value="script">Chạy Kịch Bản (aq_quest_script.json)</option>
+              </select>
+            </div>
+            <div style="display:flex; flex-direction:column; justify-content:flex-end; gap:6px;">
+              <label style="font-size:13px;"><input type="checkbox" id="chkAutoPotion" checked /> Tự bơm HP/MP (Phím 7, 9)</label>
+              <label style="font-size:13px;"><input type="checkbox" id="chkAutoBuyPotion" checked /> Tự về làng mua thuốc khi cạn</label>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button class="cyber-btn emerald" id="btnStartAutoQuest">▶ Bật Auto NV</button>
+            <button class="cyber-btn danger" id="btnStopAutoQuest">⏹ Dừng Auto NV</button>
+            <button class="cyber-btn primary" id="btnRunQuestScript">📜 Chạy Kịch Bản Lv.1-&gt;135</button>
+            <button class="cyber-btn" id="btnStepAutoQuest">⏭ Chạy 1 Bước</button>
+            <button class="cyber-btn" id="btnDiagAutoQuest">🔍 Soi NV (Diag)</button>
+          </div>
+
+          <div style="background:rgba(15,23,42,0.72); padding:10px; border-radius:10px; border:1px solid rgba(56,189,248,0.28);">
+            <div style="font-size:12px; font-weight:700; color:#fbbf24; margin-bottom:6px;">
+              🗺️ Lộ Trình Kịch Bản Chuẩn 38 Mốc (Lv.1 -&gt; Lv.135 Max • Gán NPC &amp; Bãi Cắm Chốt n0211):
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="cyber-btn" style="padding:4px 8px; font-size:11px;" data-script-goto="#1">Lv.1 Làng Nhỏ (NPC -1)</button>
+              <button class="cyber-btn" style="padding:4px 8px; font-size:11px;" data-script-goto="#2">Lv.2-10 Rừng/Đầm (NPC -3,-5)</button>
+              <button class="cyber-btn" style="padding:4px 8px; font-size:11px;" data-script-goto="#6">Lv.11-19 Cánh Đồng/Suối (NPC -8)</button>
+              <button class="cyber-btn" style="padding:4px 8px; font-size:11px;" data-script-goto="#10">Lv.20-25 Cáo Xanh (NPC -9)</button>
+              <button class="cyber-btn" style="padding:4px 8px; font-size:11px;" data-script-goto="#14">Lv.26-39 Vực Đá/Hang Lửa (NPC -35)</button>
+              <button class="cyber-btn" style="padding:4px 8px; font-size:11px;" data-script-goto="#18">Lv.40-54 TP Kho Báu (NPC -19)</button>
+              <button class="cyber-btn" style="padding:4px 8px; font-size:11px;" data-script-goto="#24">Lv.55-79 Sa Mạc/Khu Mỏ (NPC -21)</button>
+              <button class="cyber-btn" style="padding:4px 8px; font-size:11px;" data-script-goto="#29">Lv.80-110 TP Cảng/Rừng Thu (NPC -71)</button>
+              <button class="cyber-btn" style="padding:4px 8px; font-size:11px;" data-script-goto="#34">Lv.112-123 Mê Cung T1-T4 (NPC -71)</button>
+              <button class="cyber-btn" style="padding:4px 8px; font-size:11px;" data-script-goto="#36">Lv.125-135 Núi Tuyết (NPC -75)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: MENU SETUP TỰ ĐỘNG BÁN ĐỒ (AUTO_SELL) -->
+        <div id="drawerTab_sell" class="drawer-tab-pane" style="display:none;">
+          <p style="font-size:12px; color:#94a3b8; margin-bottom:10px;">
+            Tự động nhả khóa điều hướng <code>n0208</code> nhường Mod về làng bán đồ khi đầy túi rồi tiếp tục làm nhiệm vụ:
+          </p>
+          <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+            <label><input type="checkbox" id="chkSellWhite" checked /> Đồ Trắng</label>
+            <label><input type="checkbox" id="chkSellGreen" checked /> Đồ Xanh</label>
+            <label><input type="checkbox" id="chkSellYellow" checked /> Đồ Vàng</label>
+            <label><input type="checkbox" id="chkSellPurple" /> Đồ Tím</label>
+            <label><input type="checkbox" id="chkSellOrange" /> Đồ Cam</label>
+          </div>
+          <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+            <label><input type="checkbox" id="chkSellLocked" checked /> Đồ Khóa</label>
+            <label><input type="checkbox" id="chkSellUnlocked" checked /> Không Khóa</label>
+            <label><input type="checkbox" id="chkSellEnhanced" /> Đã Cường Hóa (+)</label>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span style="font-size:12px;">Ngưỡng đầy túi:</span>
+            <input type="number" id="inputSellThreshold" value="40" min="1" max="120" class="cyber-btn" style="width:80px;" />
+            <button class="cyber-btn emerald" id="btnApplyAutoSell">Lưu &amp; Bật Auto Bán</button>
+            <button class="cyber-btn primary" id="btnSellNow">Bán Ngay</button>
+          </div>
+        </div>
+
+        <!-- TAB 3: TỰ CỘNG TIỀM NĂNG (5 ĐIỂM/LV) & ĐỔI KHU -->
+        <div id="drawerTab_potential" class="drawer-tab-pane" style="display:none;">
+          <p style="font-size:12px; color:#94a3b8; margin-bottom:8px;">
+            Phân bổ tự động 5 điểm tiềm năng mỗi khi nhân vật lên cấp (STR / DEX / VIT / INT):
+          </p>
+          <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:10px;">
+            <input type="number" id="apStr" value="0" min="0" max="5" class="cyber-btn" placeholder="STR" />
+            <input type="number" id="apDex" value="0" min="0" max="5" class="cyber-btn" placeholder="DEX" />
+            <input type="number" id="apVit" value="2" min="0" max="5" class="cyber-btn" placeholder="VIT" />
+            <input type="number" id="apInt" value="3" min="0" max="5" class="cyber-btn" placeholder="INT" />
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="cyber-btn emerald" id="btnEnableAutoPotential">Bật Auto Tiềm Năng</button>
+            <button class="cyber-btn primary" id="btnApplyPotentialNow">Cộng Ngay Bây Giờ</button>
+          </div>
+        </div>
+
+        <!-- TAB 4: MỞ KHÓA VIP CROWN -->
+        <div id="drawerTab_vip" class="drawer-tab-pane" style="display:none;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+            <div>
+              <div class="vip-crown-badge">👑 VIP ADMIN - Duy Trường</div>
+              <p style="font-size:13px; color:#e2e8f0; margin-top:8px;">
+                • Treo đồng thời tối đa <strong>6 Máy Ảo</strong> trên thanh Dock (Zero-Reload Switch &lt; 50ms)<br/>
+                • Ưu tiên giữ phiên bất tử trên Server Relay lên tới <strong>24 giờ (24/7)</strong> (RingBuffer 64KB)<br/>
+                • Mở khóa toàn bộ tính năng <code>n0235</code>: Đập Đồ, Phó Bản, Tráo Đồ, Auto PK, Lửa Thiêng, Cày Bãi
+              </p>
+            </div>
+            <button class="cyber-btn emerald" id="btnUnlockVipJar">⚡ Kích Hoạt / Vá VIP Ngay</button>
+          </div>
+        </div>
+
+        <!-- TAB 5: NẠP TIỀN QR TECHCOMBANK & ĐĂNG KÝ THUÊ 24/7 / UP THUÊ -->
+        <div id="drawerTab_shop" class="drawer-tab-pane" style="display:none;">
+          <div style="display:grid; grid-template-columns:1fr 1.2fr; gap:14px;">
+            <!-- CỘT QR TECHCOMBANK NGUYỄN ĐỨC DUY TRƯỜNG -->
+            <div style="background:rgba(15,23,42,0.9); padding:12px; border-radius:12px; border:1px solid rgba(56,189,248,0.4);">
+              <div style="font-size:14px; font-weight:800; color:#38bdf8; margin-bottom:6px;">
+                🏦 NẠP TIỀN QR TECHCOMBANK (TỰ ĐỘNG X2 TRI ÂN)
+              </div>
+              <div style="font-size:12px; color:#e2e8f0; line-height:1.5; margin-bottom:8px;">
+                • Ngân hàng: <strong style="color:#fbbf24;">Techcombank (TCB)</strong><br/>
+                • Số tài khoản: <strong style="color:#10b981; font-size:14px;">9823042007</strong><br/>
+                • Chủ tài khoản: <strong style="color:#f8fafc;">NGUYỄN ĐỨC DUY TRƯỜNG</strong><br/>
+                • Số dư hiện tại: <strong style="color:#10b981;" id="shopWalletBalance">0đ</strong> | <code id="shopVipKey">Key: Chưa có</code>
+              </div>
+
+              <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;">
+                <select id="selectTopupAmount" class="cyber-btn" style="flex:1;">
+                  <option value="3000">Nạp 3.000đ (Gói 1 Ngày)</option>
+                  <option value="15000">Nạp 15.000đ (Gói 1 Tuần)</option>
+                  <option value="40000" selected>Nạp 40.000đ (Gói 1 Tháng)</option>
+                  <option value="50000">Nạp 50.000đ</option>
+                  <option value="100000">Nạp 100.000đ</option>
+                  <option value="120000">Nạp 120.000đ (Gói 3 Tháng)</option>
+                  <option value="200000">Nạp 200.000đ</option>
+                </select>
+                <button class="cyber-btn emerald" id="btnCreateTopupQr">Tạo Mã QR Nạp</button>
+              </div>
+
+              <div id="qrPaymentBox" style="text-align:center; background:#fff; padding:8px; border-radius:10px; max-width:210px; margin:0 auto;">
+                <img id="qrPaymentImg" src="https://img.vietqr.io/image/TCB-9823042007-compact2.png?amount=40000&addInfo=NAP%20DUYTRUONG&accountName=NGUYEN%20DUC%20DUY%20TRUONG" alt="QR Techcombank 9823042007 Nguyễn Đức Duy Trường" style="width:100%; height:auto; border-radius:6px;" />
+                <div style="color:#0f172a; font-size:11px; font-weight:700; margin-top:4px;" id="qrTransferContent">
+                  NAP DUYTRUONG
+                </div>
+                <div style="color:#047857; font-size:10px; font-weight:700;" id="qrCreditedPreview">
+                  1 Ngày: 3.000đ • 1 Tuần: 15.000đ • 1 Tháng: 40.000đ
+                </div>
+              </div>
+            </div>
+
+            <!-- CỘT ĐĂNG KÝ THUÊ BẬT 24/7 & DỊCH VỤ UP THUÊ (TỐI ĐA 3 THÁNG/LẦN) -->
+            <div style="background:rgba(15,23,42,0.9); padding:12px; border-radius:12px; border:1px solid rgba(16,185,129,0.4);">
+              <div style="font-size:14px; font-weight:800; color:#10b981; margin-bottom:6px;">
+                ⚡ THUÊ BẬT 24/7 &amp; ĐĂNG KÝ UP THUÊ (1 NGÀY 3K • 1 TUẦN 15K • 1 THÁNG 40K)
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                <div>
+                  <label style="font-size:11px; color:#94a3b8;">Loại Dịch Vụ Cần Thuê:</label>
+                  <select id="selectServiceType" class="cyber-btn" style="width:100%; margin-top:2px;">
+                    <option value="TREO_247">Thuê Bật Treo 24/7 &amp; Key VIP</option>
+                    <option value="UP_LEVEL">Up Thuê Level / Cày Cấp 24/7</option>
+                    <option value="UP_QUEST">Làm Thuê Nhiệm Vụ &amp; Phó Bản</option>
+                    <option value="UP_CUSTOM">Combo Treo 24/7 + Up Thuê Toàn Diện</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:11px; color:#94a3b8;">Thời Hạn Thuê (Tối đa 3 tháng):</label>
+                  <select id="selectRentPlan" class="cyber-btn" style="width:100%; margin-top:2px;">
+                    <option value="day_1">1 Ngày — 3.000đ (3k)</option>
+                    <option value="day_3">3 Ngày — 9.000đ (9k)</option>
+                    <option value="week_1">1 Tuần (7 Ngày) — 15.000đ (15k)</option>
+                    <option value="week_2">2 Tuần (14 Ngày) — 30.000đ (30k)</option>
+                    <option value="month_1" selected>1 Tháng (30 Ngày) — 40.000đ (40k)</option>
+                    <option value="month_2">2 Tháng (60 Ngày) — 80.000đ (80k)</option>
+                    <option value="month_3">3 Tháng (90 Ngày - Tối Đa) — 120.000đ (120k)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                <input type="text" id="rentGameUser" class="cyber-btn" placeholder="Tài khoản Game HSO (*)" />
+                <input type="password" id="rentGamePass" class="cyber-btn" placeholder="Mật khẩu Game HSO (*)" />
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                <input type="text" id="rentGameServer" class="cyber-btn" value="Server 1 - Chiến Thần" placeholder="Máy chủ (Server)" />
+                <input type="text" id="rentCharNote" class="cyber-btn" placeholder="Tên nhân vật / Ghi chú bãi up" />
+              </div>
+
+              <button class="cyber-btn emerald" id="btnSubmitRentOrder" style="width:100%; padding:10px; font-weight:800;">
+                🚀 ĐĂNG KÝ THUÊ 24/7 &amp; GỬI TK/MK GAME CHO ADMIN HỖ TRỢ
+              </button>
+
+              <div style="margin-top:10px; max-height:110px; overflow-y:auto; font-size:12px;" id="userOrdersList">
+                Chưa có đơn đăng ký dịch vụ nào.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL ĐĂNG NHẬP / ĐĂNG KÝ ĐỒNG BỘ TÀI KHOẢN WEB & APP -->
+  <div id="authSyncModal" style="display:none; position:fixed; inset:0; background:rgba(2,6,23,0.86); z-index:9999; align-items:center; justify-content:center; padding:16px;">
+    <div class="glass-panel" style="max-width:420px; width:100%; border:1px solid #38bdf8;">
+      <div style="font-size:18px; font-weight:800; color:#fbbf24; margin-bottom:6px;">
+        👑 ĐỒNG BỘ TÀI KHOẢN CLOUD 24/7 - DUY TRƯỜNG
+      </div>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px;">
+        Dùng chung 1 Tài Khoản &amp; Mật Khẩu trên cả <strong>Bản Web</strong> và <strong>Bản App Android</strong>. Phiên đăng nhập được bảo vệ bởi cơ chế <strong>Mạng Kép (Dual-Connection)</strong>: mất mạng không bị văng hay đăng xuất!
+      </p>
+      <div id="authModalMsg" style="font-size:12px; color:#f87171; margin-bottom:8px;"></div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <input type="text" id="authUsernameInput" class="cyber-btn" placeholder="Tên tài khoản (VD: admin hoặc tên của bạn)" value="admin" />
+        <input type="password" id="authPasswordInput" class="cyber-btn" placeholder="Mật khẩu (Mặc định admin: admin123456)" value="admin123456" />
+        <div style="display:flex; gap:8px;">
+          <button class="cyber-btn emerald" id="btnDoLogin" style="flex:1; padding:10px; font-weight:700;">Đăng Nhập Đồng Bộ</button>
+          <button class="cyber-btn primary" id="btnDoRegister" style="flex:1; padding:10px; font-weight:700;">Đăng Ký Mới</button>
+        </div>
+        <button class="cyber-btn" id="btnCloseAuthModal" style="width:100%;">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script src="/js/shared/dualConnectionClient.js"></script>
+  <script src="/js/keepAliveEngine.js"></script>
+  <script src="/js/user/userApp.js"></script>
+</body>
+</html>

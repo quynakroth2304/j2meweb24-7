@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J2ME Cloud Portal - Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#070b14',
+                        sidebarBg: '#0a0e17',
+                        cardBg: '#121826',
+                        borderSubtle: 'rgba(255, 255, 255, 0.08)',
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #070b14;
+            color: #f1f5f9;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #070b14;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body class="font-sans antialiased min-h-screen flex">
+
+    <!-- SIDEBAR TRÁI -->
+    <aside class="w-60 bg-sidebarBg border-r border-borderSubtle flex flex-col fixed inset-y-0 z-30">
+        <div class="p-5 flex items-center space-x-3 border-b border-borderSubtle">
+            <div
+                class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-lg">
+                <i class="fa-solid fa-bolt text-lg"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-sm text-white">J2ME CLOUD</h1>
+                <p class="text-[11px] text-slate-400" id="userRoleBadgeText">Đang tải...</p>
+            </div>
+        </div>
+
+        <nav class="flex-1 px-3 py-4 space-y-1.5 text-sm">
+            <a href="#" onclick="switchTab('overview')" id="nav-overview"
+                class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-white bg-indigo-600/20 border border-indigo-500/30">
+                <i class="fa-solid fa-chart-pie text-indigo-400 w-5"></i>
+                <span>Tổng Quan</span>
+            </a>
+            <a href="#" onclick="switchTab('vms')" id="nav-vms"
+                class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-slate-400 hover:text-white hover:bg-slate-800/50">
+                <i class="fa-solid fa-server text-slate-400 w-5"></i>
+                <span>Quản Lý Máy Ảo</span>
+            </a>
+            <a href="#" onclick="switchTab('logs')" id="nav-logs"
+                class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-slate-400 hover:text-white hover:bg-slate-800/50">
+                <i class="fa-solid fa-terminal text-slate-400 w-5"></i>
+                <span>Nhật Ký Hệ Thống</span>
+            </a>
+            <div id="adminNavSection" class="hidden pt-2 mt-2 border-t border-borderSubtle">
+                <a href="/admin.html"
+                    class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-amber-400 hover:bg-amber-500/10">
+                    <i class="fa-solid fa-gears w-5"></i>
+                    <span>Bảng Quản Trị (Admin)</span>
+                </a>
+            </div>
+        </nav>
+
+        <div class="p-4 border-t border-borderSubtle bg-black/20 flex items-center justify-between">
+            <span class="text-xs text-slate-400 font-semibold" id="loggedInUser">...</span>
+            <button onclick="handleLogout()" class="text-xs text-rose-400 hover:underline">Đăng xuất</button>
+        </div>
+    </aside>
+
+    <!-- NỘI DUNG CHÍNH -->
+    <div class="flex-1 ml-60 flex flex-col min-h-screen">
+        <header
+            class="h-16 bg-sidebarBg/80 backdrop-blur-md border-b border-borderSubtle px-8 flex items-center justify-between sticky top-0 z-20">
+            <div class="text-sm text-slate-400">
+                <span class="text-white font-medium">Hệ Thống</span> / <span id="currentBreadcrumb"
+                    class="text-sky-400 font-medium">Tổng Quan</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="openModal('addModal')"
+                    class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold">
+                    <i class="fa-solid fa-plus mr-1"></i> Tạo Máy Ảo
+                </button>
+                <button onclick="loadVMs()"
+                    class="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold">
+                    <i class="fa-solid fa-rotate mr-1"></i> Làm mới
+                </button>
+            </div>
+        </header>
+
+        <main class="flex-1 p-8 space-y-8">
+            <!-- TAB TỔNG QUAN -->
+            <div id="tab-overview" class="space-y-6">
+                <h2 class="text-2xl font-bold text-white">Trang Chủ Điều Khiển</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-cardBg border border-borderSubtle rounded-2xl p-5">
+                        <div class="text-slate-400 text-xs">Máy ảo đang chạy</div>
+                        <div class="text-3xl font-bold text-sky-400 mt-1" id="statActiveVms">0 / 0</div>
+                    </div>
+                    <div class="bg-cardBg border border-borderSubtle rounded-2xl p-5">
+                        <div class="text-slate-400 text-xs">Trạng thái hệ thống</div>
+                        <div class="text-3xl font-bold text-white mt-1">Hoạt động 24/7</div>
+                    </div>
+                    <div class="bg-cardBg border border-borderSubtle rounded-2xl p-5">
+                        <div class="text-slate-400 text-xs">Môi trường giả lập</div>
+                        <div class="text-3xl font-bold text-emerald-400 mt-1">Ổn định (High FPS)</div>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <h3 class="text-lg font-bold text-white">Truy Cập Nhanh Máy Ảo</h3>
+                    <div id="overviewVmGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+                </div>
+            </div>
+
+            <!-- TAB MÁY ẢO (VMS) -->
+            <div id="tab-vms" class="space-y-6 hidden">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-white">Danh Sách Máy Ảo J2ME</h2>
+                    <button onclick="openModal('addModal')"
+                        class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all">
+                        <i class="fa-solid fa-plus mr-1"></i> Thêm Máy Ảo Mới
+                    </button>
+                </div>
+                <div id="vmGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+            </div>
+
+            <!-- TAB NHẬT KÝ -->
+            <div id="tab-logs" class="space-y-4 hidden">
+                <h2 class="text-2xl font-bold text-white">Nhật Ký Hệ Thống</h2>
+                <div id="systemLogsBox"
+                    class="bg-cardBg border border-borderSubtle rounded-2xl p-4 font-mono text-xs text-slate-400 space-y-1 max-h-96 overflow-y-auto">
+                    <div>[INFO] Khởi tạo môi trường giả lập J2ME thành công.</div>
+                    <div>[SUCCESS] Đã sẵn sàng chạy máy ảo 24/7.</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL THÊM MÁY ẢO MỚI -->
+    <div id="addModal"
+        class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-borderSubtle rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-borderSubtle pb-3">
+                <h3 class="text-lg font-bold text-white">Thêm Máy Ảo J2ME Mới</h3>
+                <button onclick="closeModal('addModal')" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="createVmForm" onsubmit="handleCreateVM(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Tên máy ảo / Nhân vật</label>
+                    <input type="text" id="vmName" required placeholder="VD: HSO Bot Cày Xu 01"
+                        class="w-full px-3.5 py-2 rounded-xl bg-darkBg border border-borderSubtle text-white text-sm focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Độ phân giải màn hình</label>
+                    <select id="vmResolution"
+                        class="w-full px-3.5 py-2 rounded-xl bg-darkBg border border-borderSubtle text-white text-sm focus:outline-none focus:border-indigo-500">
+                        <option value="240x320">240 x 320 (Chuẩn dọc)</option>
+                        <option value="320x240">320 x 240 (Ngang)</option>
+                        <option value="176x208">176 x 208 (Nhỏ - Nhẹ RAM)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">File Game (.jar) (Tùy chọn - Mặc định dùng bản HSO 402 VIP)</label>
+                    <input type="file" id="vmJarFile" accept=".jar"
+                        class="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-600/20 file:text-indigo-400 hover:file:bg-indigo-600/30">
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-3 border-t border-borderSubtle">
+                    <button type="button" onclick="closeModal('addModal')"
+                        class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">
+                        Hủy
+                    </button>
+                    <button type="submit" id="submitVmBtn"
+                        class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold">
+                        <i class="fa-solid fa-plus mr-1"></i> Tạo Máy Ảo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        async function checkSession() {
+            try {
+                const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+                if (!res.ok) {
+                    window.location.href = '/login.html';
+                    return null;
+                }
+                const { user } = await res.json();
+                localStorage.setItem('j2me_user', JSON.stringify(user));
+                document.getElementById('loggedInUser').innerText = user.username;
+                document.getElementById('userRoleBadgeText').innerText = user.role === 'admin' ? 'Quản Trị Viên' : 'Thành Viên';
+                if (user.role === 'admin') {
+                    document.getElementById('adminNavSection').classList.remove('hidden');
+                }
+                return user;
+            } catch (_) {
+                window.location.href = '/login.html';
+                return null;
+            }
+        }
+
+        function switchTab(tabId) {
+            ['overview', 'vms', 'logs'].forEach(id => {
+                document.getElementById('tab-' + id).classList.add('hidden');
+                document.getElementById('nav-' + id).className = "flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-slate-400 hover:text-white hover:bg-slate-800/50";
+            });
+            document.getElementById('tab-' + tabId).classList.remove('hidden');
+            document.getElementById('nav-' + tabId).className = "flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-white bg-indigo-600/20 border border-indigo-500/30";
+
+            const titles = { overview: 'Tổng Quan', vms: 'Quản Lý Máy Ảo', logs: 'Nhật Ký Hệ Thống' };
+            document.getElementById('currentBreadcrumb').innerText = titles[tabId];
+
+            if (tabId === 'vms' || tabId === 'overview') loadVMs();
+        }
+
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.remove('hidden');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        async function loadVMs() {
+            try {
+                const res = await fetch('/api/vms', { credentials: 'same-origin' });
+                if (res.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                if (!res.ok) return;
+                const data = await res.json();
+                const vmsArray = Array.isArray(data) ? data : (data.vms || []);
+                const runningCount = vmsArray.filter(v => v.running).length;
+                const statEl = document.getElementById('statActiveVms');
+                if (statEl) statEl.innerText = `${runningCount} / ${vmsArray.length}`;
+
+                renderVMGrid(vmsArray, document.getElementById('vmGrid'));
+                renderVMGrid(vmsArray, document.getElementById('overviewVmGrid'));
+            } catch (err) {
+                console.error('Lỗi tải danh sách máy ảo:', err);
+            }
+        }
+
+        function renderVMGrid(vms, grid) {
+            if (!grid) return;
+
+            if (!vms || vms.length === 0) {
+                grid.innerHTML = `<div class="col-span-3 text-center py-10 text-slate-500 text-xs">Chưa có máy ảo nào được tạo. Bấm "Tạo Máy Ảo" để bắt đầu.</div>`;
+                return;
+            }
+
+            const ocrData = JSON.parse(localStorage.getItem('j2me_ocr_data') || '{}');
+
+            grid.innerHTML = vms.map(vm => {
+                const charInfo = ocrData[String(vm.id)] || null;
+                const ocrBlock = charInfo ? `
+                    <div class="bg-black/30 rounded-xl p-2.5 text-xs space-y-1 border border-white/5">
+                        <div class="flex justify-between"><span class="text-slate-400">Nhân vật:</span><span class="font-semibold text-white">${charInfo.name}</span></div>
+                        <div class="flex justify-between"><span class="text-slate-400">Cấp độ:</span><span class="font-semibold text-amber-400">Lv.${charInfo.level}</span></div>
+                        <div class="flex justify-between"><span class="text-slate-400">Vàng:</span><span class="font-semibold text-emerald-400">${charInfo.gold}</span></div>
+                    </div>
+                ` : '';
+                return `
+                <div class="bg-cardBg border border-borderSubtle rounded-2xl p-5 space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-white truncate max-w-[170px]">${vm.name || ('Máy Ảo #' + vm.id)}</span>
+                        <span class="text-[10px] ${vm.running ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-500/10 text-slate-400'} px-2 py-0.5 rounded">
+                            ${vm.running ? 'Đang chạy 24/7' : 'Đã dừng'}
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400">ID: #${vm.id} • Màn hình: ${vm.resolution || '240x320'} • ${vm.running ? 'PID: ' + vm.pid : 'Stopped'}</p>
+                    ${ocrBlock}
+                    <div class="flex space-x-2">
+                        <a href="/play.html?id=${vm.id}" class="flex-1 text-center py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition-all">
+                            🎮 Vào Chơi Ngay
+                        </a>
+                        <button onclick="deleteVM(${vm.id})" class="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs transition-all" title="Xóa máy ảo">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        async function handleCreateVM(event) {
+            event.preventDefault();
+            const btn = document.getElementById('submitVmBtn');
+            const name = document.getElementById('vmName').value.trim();
+            const resolution = document.getElementById('vmResolution').value;
+            const fileInput = document.getElementById('vmJarFile');
+
+            btn.disabled = true;
+            btn.innerText = 'Đang tạo...';
+
+            try {
+                let uploadedJarName = null;
+                if (fileInput && fileInput.files && fileInput.files[0]) {
+                    const formData = new FormData();
+                    formData.append('jar', fileInput.files[0]);
+                    const upRes = await fetch('/api/games/upload', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        body: formData
+                    });
+                    const upData = await upRes.json();
+                    if (!upRes.ok) throw new Error(upData.error || 'Lỗi tải file .jar');
+                    uploadedJarName = upData.file;
+                }
+
+                const res = await fetch('/api/vm/add-instance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ name, resolution, jarFile: uploadedJarName })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Không thể tạo máy ảo');
+
+                closeModal('addModal');
+                document.getElementById('createVmForm').reset();
+                await loadVMs();
+            } catch (err) {
+                alert('Lỗi: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Tạo Máy Ảo';
+            }
+        }
+
+        async function deleteVM(vmId) {
+            if (!confirm('Bạn có chắc muốn xóa Máy ảo #' + vmId + '? Mọi dữ liệu game (RMS) của máy ảo này sẽ bị xóa.')) return;
+            try {
+                const res = await fetch('/api/vms/' + vmId, { method: 'DELETE', credentials: 'same-origin' });
+                if (res.ok) loadVMs();
+            } catch (err) {
+                alert('Lỗi khi xóa máy ảo: ' + err.message);
+            }
+        }
+
+        async function handleLogout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+            } catch (_) {}
+            localStorage.removeItem('j2me_user');
+            window.location.href = '/login.html';
+        }
+
+        checkSession().then((u) => {
+            if (u) loadVMs();
+        });
+    </script>
+</body>
+
+</html>

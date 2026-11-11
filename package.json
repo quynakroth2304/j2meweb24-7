@@ -1,0 +1,23 @@
+{
+  "name": "j2me-cloud-server",
+  "version": "1.2.0",
+  "description": "Web Server choi game J2ME 24/7 tren Cloud, Windows, Linux va Docker",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node scripts/verify-acceptance.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.18",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cookie-parser": "^1.4.7",
+    "express": "^4.22.3",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "ws": "^8.22.1"
+  }
+}

@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: hso-duytruong-cloud-247
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: CLOUD_VM_MODE
+        value: "1"
+      - key: RELAY_ALLOWED_UPSTREAMS
+        value: "27.0.14.78:19129,27.0.14.78:19130,115.84.182.34:19129,knightageonline.com:80,knightageonline.com:443"
+      - key: JWT_SECRET
+        generateValue: true

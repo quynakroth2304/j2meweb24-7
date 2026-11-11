@@ -102,6 +102,9 @@ function createRbacMiddlewares({ userStore, dualSessionStore }) {
   }
 
   return {
+    extractTokenFromReq: extractAccessToken,
+    extractAccessToken,
+    extractRefreshToken,
     verifyUserFromRequest,
     requireAuth,
     requireAdmin,
@@ -111,6 +114,7 @@ function createRbacMiddlewares({ userStore, dualSessionStore }) {
 
 module.exports = {
   createRbacMiddlewares,
+  extractTokenFromReq: extractAccessToken,
   extractAccessToken,
   extractRefreshToken
 };

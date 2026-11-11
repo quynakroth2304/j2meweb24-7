@@ -21,7 +21,7 @@ class DualSessionStore {
   _load() {
     if (!fs.existsSync(this.filePath)) {
       return {
-        refreshTokens: {}, // refreshToken -> { userId, username, role, issuedAt, expiresAt, lastSeenAt, revoked }
+        refreshTokens: {}, // refreshToken -> { userId, username, role, deviceInfo, issuedAt, expiresAt, lastSeenAt, graceUntil, revoked }
         processedActions: {} // actionId -> { userId, type, processedAt, clientTimestamp }
       };
     }
@@ -44,7 +44,7 @@ class DualSessionStore {
     } catch (_) {}
   }
 
-  issueTokenPair(user) {
+  issueTokenPair(user, deviceInfo = '') {
     const accessToken = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
       config.JWT_SECRET,
@@ -57,6 +57,7 @@ class DualSessionStore {
       userId: Number(user.id),
       username: user.username,
       role: user.role,
+      deviceInfo: String(deviceInfo || 'Web / Android'),
       issuedAt: now,
       lastSeenAt: now,
       graceUntil: now + SESSION_GRACE_PERIOD_MS,
@@ -68,6 +69,7 @@ class DualSessionStore {
     return {
       accessToken,
       refreshToken,
+      gracePeriodMs: SESSION_GRACE_PERIOD_MS,
       gracePeriodSec: Math.round(SESSION_GRACE_PERIOD_MS / 1000),
       expiresAt: now + REFRESH_TOKEN_TTL_MS
     };
@@ -81,6 +83,55 @@ class DualSessionStore {
         rec.graceUntil = now + SESSION_GRACE_PERIOD_MS;
       }
     }
+  }
+
+  getSessionStatus(userId) {
+    const uid = Number(userId);
+    const now = Date.now();
+    let latestRec = null;
+    for (const rec of Object.values(this._state.refreshTokens)) {
+      if (rec.userId === uid && !rec.revoked && rec.expiresAt > now) {
+        if (!latestRec || (rec.lastSeenAt || 0) > (latestRec.lastSeenAt || 0)) {
+          latestRec = rec;
+        }
+      }
+    }
+    const graceUntil = latestRec ? (latestRec.graceUntil || (now + SESSION_GRACE_PERIOD_MS)) : (now + SESSION_GRACE_PERIOD_MS);
+    return {
+      userId: uid,
+      online: true,
+      dualNetworkActive: true,
+      lastSeenAt: latestRec ? new Date(latestRec.lastSeenAt).toISOString() : new Date(now).toISOString(),
+      graceUntil: new Date(graceUntil).toISOString(),
+      graceRemainingSec: Math.max(0, Math.round((graceUntil - now) / 1000)),
+      gracePeriodMs: SESSION_GRACE_PERIOD_MS
+    };
+  }
+
+  listAllActiveSessions() {
+    const now = Date.now();
+    const byUser = new Map();
+    for (const rec of Object.values(this._state.refreshTokens)) {
+      if (!rec || rec.revoked || (rec.expiresAt && rec.expiresAt <= now)) continue;
+      const prev = byUser.get(rec.userId);
+      if (!prev || (rec.lastSeenAt || 0) > (prev.lastSeenAt || 0)) {
+        byUser.set(rec.userId, rec);
+      }
+    }
+    return Array.from(byUser.values()).map((rec) => {
+      const graceUntil = rec.graceUntil || ((rec.lastSeenAt || now) + SESSION_GRACE_PERIOD_MS);
+      const inGraceWindow = graceUntil > now;
+      return {
+        userId: rec.userId,
+        username: rec.username,
+        role: rec.role,
+        deviceInfo: rec.deviceInfo || 'Web / Android',
+        lastSeenAt: new Date(rec.lastSeenAt || now).toISOString(),
+        graceUntil: new Date(graceUntil).toISOString(),
+        graceRemainingSec: Math.max(0, Math.round((graceUntil - now) / 1000)),
+        status: inGraceWindow ? 'ONLINE_OR_GRACE' : 'IDLE_SAVED'
+      };
+    });
   }
 
   refreshAccessToken(refreshToken, userStore) {
@@ -128,7 +179,7 @@ class DualSessionStore {
    * Xử lý hàng đợi Offline (Offline Queue) gửi từ Client khi có mạng trở lại.
    * Sắp xếp theo clientTimestamp tăng dần và chống ghi trùng bằng actionId.
    */
-  processOfflineQueue(user, actions = [], handlers = {}) {
+  async processOfflineQueue(user, actions = [], handlers = {}) {
     if (!Array.isArray(actions) || actions.length === 0) {
       return { processedCount: 0, skippedDuplicateCount: 0, results: [] };
     }
@@ -163,7 +214,7 @@ class DualSessionStore {
         let outcome = { ok: true };
 
         if (typeof handlers[type] === 'function') {
-          outcome = handlers[type](user, payload, item) || { ok: true };
+          outcome = (await handlers[type](user, payload, item)) || { ok: true };
         }
 
         const nowIso = new Date().toISOString();
@@ -196,5 +247,10 @@ class DualSessionStore {
     };
   }
 }
+
+// Hỗ trợ cả hai kiểu import: const DualSessionStore = require(...) VÀ const { DualSessionStore, SESSION_GRACE_PERIOD_MS } = require(...)
+DualSessionStore.DualSessionStore = DualSessionStore;
+DualSessionStore.SESSION_GRACE_PERIOD_MS = SESSION_GRACE_PERIOD_MS;
+DualSessionStore.REFRESH_TOKEN_TTL_MS = REFRESH_TOKEN_TTL_MS;
 
 module.exports = DualSessionStore;

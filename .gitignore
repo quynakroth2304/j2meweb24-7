@@ -6,4 +6,4 @@ backups/
 *.sqlite3
 .env
 .DS_Store
-emulator/*.tmp*node_modules/ 
+emulator/*.tmp*

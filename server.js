@@ -17,7 +17,9 @@ const config = require('./config');
 const VMManager = require('./vmManager');
 const UserStore = require('./src/userStore');
 const { CommerceStore, BANK_CONFIG } = require('./src/commerceStore');
-const { DualSessionStore, SESSION_GRACE_PERIOD_MS } = require('./src/shared/dualSessionStore');
+const rawDualSessionMod = require('./src/shared/dualSessionStore');
+const DualSessionStore = typeof rawDualSessionMod === 'function' ? rawDualSessionMod : rawDualSessionMod.DualSessionStore;
+const SESSION_GRACE_PERIOD_MS = rawDualSessionMod.SESSION_GRACE_PERIOD_MS || (30 * 60 * 1000);
 const { createRbacMiddlewares } = require('./src/middleware/rbacGuard');
 const { patchJarToVipAdmin } = require('./unlock-vip');
 const { NetworkRelayGateway, createHttpNetProxyHandler } = require('./networkRelay');
@@ -1328,14 +1330,90 @@ app.post('/api/commerce/rent', requireAuth, (req, res) => {
 });
 
 app.post('/api/commerce/heartbeat', requireAuth, (req, res) => {
-  dualSessionStore.touchSessionByUser(req.user.id);
-  const wallet = commerceStore.recordClientSync(req.user.id, req.user.username, req.body || {});
+  const body = req.body || {};
+  dualSessionStore.touchSessionByUser(req.user.id, body.platform || '');
+  const wallet = commerceStore.recordClientSync(req.user.id, req.user.username, body);
   res.json({
     success: true,
     wallet,
     sessionStatus: dualSessionStore.getSessionStatus(req.user.id),
     eventConfig: commerceStore.getEventConfig()
   });
+});
+
+// ==================== ĐỒNG BỘ & DUY TRÌ 24/7 CHO NGƯỜI CHƠI BẢN MÁY TÍNH (PC DESKTOP LAUNCHER) ====================
+app.post('/api/pc/sync-session', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const authedUser = verifyUserFromRequest(req, res);
+    const userId = authedUser ? authedUser.id : 1;
+    const username = authedUser
+      ? authedUser.username
+      : String(body.username || body.gameUsername || body.pcClientId || 'PC_Player').trim();
+    const slotId = Math.max(1, Math.min(20, Number(body.slotId || 1)));
+
+    // 1. Lưu đồng bộ RMS từ máy tính lên Cloud Render để giữ tài khoản & cấu hình không mất
+    let syncedRmsCount = 0;
+    if (body.rmsRecords && typeof body.rmsRecords === 'object') {
+      const saveDir = path.join(config.DATA_DIR, 'users', `user_${userId}`, 'saves', `rms_vm_${slotId}`, 'rms');
+      fs.mkdirSync(saveDir, { recursive: true });
+      for (const [rawName, base64Val] of Object.entries(body.rmsRecords)) {
+        const safeName = path.basename(String(rawName)).replace(/[^a-zA-Z0-9._-]/g, '_');
+        if (!safeName || typeof base64Val !== 'string') continue;
+        const buf = Buffer.from(base64Val, 'base64');
+        if (buf.length <= 512 * 1024) {
+          fs.writeFileSync(path.join(saveDir, safeName), buf);
+          syncedRmsCount++;
+        }
+      }
+    }
+
+    // 2. Ghi nhận phiên Mạng Kép PC 24/7 & cập nhật lên Admin Dashboard
+    const pcSession = dualSessionStore.recordPcClientSession({
+      ...body,
+      userId,
+      username,
+      role: authedUser ? authedUser.role : 'pc-client',
+      platform: body.platform || 'PC Desktop (HSO-AutoQuest-PC-Launcher)'
+    });
+
+    commerceStore.recordClientSync(userId, username, {
+      platform: body.platform || 'PC Desktop 24/7',
+      activeSlot: slotId,
+      autoQuest: Boolean(body.autoQuest),
+      mapName: body.mapName || 'Đang cắm trên PC',
+      level: Number(body.level || 1),
+      gameUsername: body.gameUsername || username,
+      charName: body.charName || body.gameUsername || username,
+      stateText: body.stateText || (body.autoQuest ? `Auto NV (${body.questScope || 'ALL'})` : 'Đang chơi trên PC'),
+      frameDataUrl: body.frameDataUrl || ''
+    });
+
+    // 3. Nếu người chơi PC bấm "Chuyển giao / Duy trì 24/7 trên Cloud Render" -> Bật luôn VM trên Render
+    let cloudVmHandover = false;
+    if (body.startCloudVm247) {
+      ensureDefaultVMForUser(userId);
+      markVMDesired(userId, slotId);
+      await vmManager.startVM(userId, slotId);
+      const scope = String(body.questScope || 'ALL').toUpperCase();
+      if (body.autoQuest !== false) {
+        vmManager.sendCommand(userId, slotId, `AUTO_QUEST:1:${scope}:1:1:1`);
+      }
+      cloudVmHandover = true;
+    }
+
+    res.json({
+      success: true,
+      cloudUrl: process.env.RENDER_EXTERNAL_URL || 'https://j2meweb24-7.onrender.com',
+      syncedRmsCount,
+      cloudVmHandover,
+      pcSession,
+      eventConfig: commerceStore.getEventConfig(),
+      serverTimestamp: Date.now()
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Lỗi đồng bộ phiên PC 24/7: ${err.message}` });
+  }
 });
 
 // ==================== ĐỒNG BỘ HÀNG ĐỢI OFFLINE (DUAL-CONNECTION SYNC QUEUE) ====================
@@ -1394,8 +1472,8 @@ app.post('/api/sync/offline-queue', requireAuth, async (req, res) => {
     const wallet = commerceStore.getWallet(req.user.id, req.user.username);
     res.json({
       success: true,
-      processedCount: results.length,
-      results,
+      processedCount: results.processedCount || 0,
+      results: results.results || [],
       wallet,
       serverTimestamp: Date.now()
     });
@@ -1404,12 +1482,13 @@ app.post('/api/sync/offline-queue', requireAuth, async (req, res) => {
   }
 });
 
-// --- API DÀNH RIÊNG CHO ADMIN KIỂM SOÁT TOÀN BỘ WEB & APP ---
+// --- API DÀNH RIÊNG CHO ADMIN KIỂM SOÁT TOÀN BỘ WEB & APP & PC ---
 app.get('/api/admin/dual-sessions', requireAuth, requireAdmin, (req, res) => {
   res.json({
     success: true,
     gracePeriodMs: SESSION_GRACE_PERIOD_MS,
-    sessions: dualSessionStore.listAllActiveSessions()
+    sessions: dualSessionStore.listAllActiveSessions(),
+    pcSessions: dualSessionStore.listPcSessions()
   });
 });
 
@@ -1420,6 +1499,7 @@ app.get('/api/admin/commerce/overview', requireAuth, requireAdmin, (req, res) =>
     success: true,
     ...snapshot,
     dualSessions: dualSessionStore.listAllActiveSessions(),
+    pcSessions: dualSessionStore.listPcSessions(),
     relayStats: networkRelay.getStatsSnapshot()
   });
 });

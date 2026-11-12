@@ -1,4 +1,4 @@
-// public/js/admin/adminApp.js — Khu vực Quản Trị Viên (ADMIN PORTAL) độc lập + Chặn RBAC 2 Lớp + Quản lý Sự kiện, Đơn Nạp QR Techcombank, Đơn Thuê 24/7 & Phiên Mạng Kép
+// public/js/admin/adminApp.js — Khu vực Quản Trị Viên (ADMIN PORTAL) + Đăng Nhập Trực Tiếp + Giám Sát Phiên Web / Android / Bản Máy Tính PC 24/7
 (function () {
   'use strict';
 
@@ -41,7 +41,9 @@
   }
 
   function authHeaders() {
-    if (dualClient) return dualClient.authHeaders();
+    if (dualClient && typeof dualClient.authHeaders === 'function') {
+      return dualClient.authHeaders();
+    }
     const token = localStorage.getItem('duytruong_auth_token') || '';
     return {
       'Content-Type': 'application/json',
@@ -52,38 +54,114 @@
   function updateHeaderStatus(st) {
     const el = document.getElementById('adminHeaderStatus');
     if (!el) return;
-    const u = dualClient ? dualClient.getUser() : null;
+    const u = dualClient && typeof dualClient.getUser === 'function' ? dualClient.getUser() : null;
     const online = st ? st.isOnline : (dualClient ? dualClient.isOnline : navigator.onLine !== false);
     el.innerHTML = u
-      ? `👑 Đang đăng nhập: <b style="color:#fbbf24;">${escapeHtml(u.username)}</b> (Role: <b>${escapeHtml(u.role)}</b>) • Mạng Kép: <b style="color:${online ? '#10b981' : '#f59e0b'};">${online ? 'ONLINE (Grace Period 30 phút)' : 'OFFLINE'}</b>`
+      ? `👑 Đang đăng nhập: <b style="color:#fbbf24;">${escapeHtml(u.username)}</b> (Role: <b>${escapeHtml(u.role)}</b>) • Mạng Kép Render 24/7: <b style="color:${online ? '#10b981' : '#f59e0b'};">${online ? 'ONLINE (Giữ phiên Web + App + PC 24/7)' : 'OFFLINE'}</b>`
       : 'Đang xác thực quyền Quản trị viên...';
+  }
+
+  function showInlineLoginBox(errMsg = '') {
+    const loginBox = document.getElementById('adminLoginBox');
+    const forbiddenBox = document.getElementById('adminForbiddenBox');
+    const workspace = document.getElementById('adminMainWorkspace');
+    if (forbiddenBox) forbiddenBox.style.display = 'none';
+    if (workspace) workspace.style.display = 'none';
+    if (loginBox) loginBox.style.display = 'flex';
+    const errEl = document.getElementById('inlineAdminError');
+    if (errEl && errMsg) errEl.textContent = errMsg;
+  }
+
+  async function handleInlineAdminLogin() {
+    const userEl = document.getElementById('inlineAdminUser');
+    const passEl = document.getElementById('inlineAdminPass');
+    const errEl = document.getElementById('inlineAdminError');
+    const btnEl = document.getElementById('btnInlineAdminLogin');
+
+    const username = userEl ? userEl.value.trim() : 'admin';
+    const password = passEl ? passEl.value : '';
+    if (errEl) errEl.textContent = '';
+
+    if (!username || !password) {
+      if (errEl) errEl.textContent = 'Vui lòng nhập đầy đủ tài khoản và mật khẩu Admin.';
+      return;
+    }
+
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = '⏳ Đang xác thực quyền Admin...';
+    }
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, platform: 'Admin Portal Web' })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (errEl) errEl.textContent = data.error || 'Sai tài khoản hoặc mật khẩu.';
+        return;
+      }
+      if (!data.user || data.user.role !== 'admin') {
+        if (errEl) errEl.textContent = 'Tài khoản này không có quyền Admin (role !== admin).';
+        return;
+      }
+
+      if (dualClient) {
+        dualClient.saveSession({
+          accessToken: data.accessToken || data.token,
+          refreshToken: data.refreshToken,
+          user: data.user,
+          wallet: data.wallet
+        });
+      } else {
+        localStorage.setItem('duytruong_auth_token', data.accessToken || data.token || '');
+        localStorage.setItem('duytruong_user_profile', JSON.stringify(data.user));
+      }
+
+      showToast('👑 Đăng nhập Quản trị viên thành công!');
+      await verifyAdminAccessAndInit();
+    } catch (err) {
+      if (errEl) errEl.textContent = 'Lỗi kết nối máy chủ: ' + err.message;
+    } finally {
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = '👑 Đăng Nhập Vào Bảng Điều Khiển Admin Ngay';
+      }
+    }
   }
 
   // ==================== CHẶN PHÂN QUYỀN FRONTEND (ROUTE GUARD) ====================
   async function verifyAdminAccessAndInit() {
+    const loginBox = document.getElementById('adminLoginBox');
     const forbiddenBox = document.getElementById('adminForbiddenBox');
     const workspace = document.getElementById('adminMainWorkspace');
 
     try {
-      const res = dualClient
+      const res = dualClient && typeof dualClient.fetchWithAuth === 'function'
         ? await dualClient.fetchWithAuth('/api/auth/me')
         : await fetch('/api/auth/me', { headers: authHeaders(), credentials: 'include' });
 
       if (res.status === 401) {
-        window.location.replace('/login.html');
+        // Hiển thị ngay hộp đăng nhập Admin trực tiếp trên trang để không bị màn hình đen hay vòng lặp
+        showInlineLoginBox();
         return;
       }
 
       const data = await res.json();
       const user = data && data.user ? data.user : (dualClient ? dualClient.getUser() : null);
 
-      if (!user || user.role !== 'admin') {
-        // Nếu là tài khoản user thường cố vào /admin -> hiện 403 và tự chuyển về /app
+      if (!user) {
+        showInlineLoginBox();
+        return;
+      }
+
+      if (user.role !== 'admin') {
+        if (loginBox) loginBox.style.display = 'none';
         if (forbiddenBox) forbiddenBox.style.display = 'block';
         if (workspace) workspace.style.display = 'none';
-        setTimeout(() => {
-          window.location.replace('/play.html?error=forbidden_admin');
-        }, 1200);
         return;
       }
 
@@ -94,30 +172,35 @@
         });
       }
 
+      if (loginBox) loginBox.style.display = 'none';
       if (forbiddenBox) forbiddenBox.style.display = 'none';
       if (workspace) workspace.style.display = 'flex';
       updateHeaderStatus();
       await Promise.all([loadCommerceOverview(), loadSystemOverview()]);
     } catch (_) {
-      // Nếu mất mạng tạm thời nhưng trong bộ nhớ bền vững đã xác nhận role === 'admin'
-      const cachedUser = dualClient ? dualClient.getUser() : null;
+      const cachedUser = dualClient && typeof dualClient.getUser === 'function' ? dualClient.getUser() : null;
       if (cachedUser && cachedUser.role === 'admin') {
+        if (loginBox) loginBox.style.display = 'none';
         if (workspace) workspace.style.display = 'flex';
         updateHeaderStatus();
         showToast('📡 Đang Offline: Giữ nguyên phiên Admin cục bộ (Mạng Kép), dữ liệu sẽ làm mới khi có mạng!');
       } else {
-        if (forbiddenBox) forbiddenBox.style.display = 'block';
+        showInlineLoginBox();
       }
     }
   }
 
-  // ==================== TẢI DỮ LIỆU THƯƠNG MẠI, ĐƠN NẠP QR, ĐƠN UP THUÊ & PHIÊN MẠNG KÉP ====================
+  // ==================== TẢI DỮ LIỆU THƯƠNG MẠI, ĐƠN NẠP QR, ĐƠN UP THUÊ & PHIÊN MẠNG KÉP (GỒM BẢN PC) ====================
   async function loadCommerceOverview() {
     try {
-      const res = dualClient
+      const res = dualClient && typeof dualClient.fetchWithAuth === 'function'
         ? await dualClient.fetchWithAuth('/api/admin/commerce/overview')
-        : await fetch('/api/admin/commerce/overview', { headers: authHeaders() });
+        : await fetch('/api/admin/commerce/overview', { headers: authHeaders(), credentials: 'include' });
 
+      if (res.status === 401) {
+        showInlineLoginBox();
+        return;
+      }
       if (res.status === 403) {
         window.location.replace('/play.html?error=forbidden_admin');
         return;
@@ -157,7 +240,7 @@
                     (Thực nhận: ${formatVnd(t.creditedAmountVnd || t.creditedVnd)} • X${t.multiplierApplied || t.multiplier || 1})
                   </div>
                   <div style="color:#9be7ff; margin-top:2px;">
-                    Nội dung CK: <b>${escapeHtml(t.transferContent)}</b> • Nguồn: ${escapeHtml(t.platform || 'Web/App')} • Trạng thái: <b>${escapeHtml(t.status)}</b>
+                    Nội dung CK: <b>${escapeHtml(t.transferContent)}</b> • Nguồn: ${escapeHtml(t.platform || 'Web/App/PC')} • Trạng thái: <b>${escapeHtml(t.status)}</b>
                   </div>
                 </div>
                 ${
@@ -220,7 +303,7 @@
         }
       }
 
-      // 4. Phiên Mạng Kép (Dual-Connection Sessions)
+      // 4. Phiên Mạng Kép (Dual-Connection Sessions: Web + Android + PC Desktop)
       const dualBox = document.getElementById('adminDualSessionsBox');
       if (dualBox) {
         const sessions = data.dualSessions || [];
@@ -232,12 +315,12 @@
               (s) => `
               <div style="padding:7px; border-bottom:1px solid rgba(148,163,184,0.15); display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                  <b style="color:#f8fafc;">User #${s.userId}: ${escapeHtml(s.username)}</b> (${escapeHtml(s.role)})
+                  <b style="color:#f8fafc;">User #${s.userId}: ${escapeHtml(s.username)}</b> <span style="color:#fbbf24;">(${escapeHtml(s.role)})</span>
                   <div style="color:#94a3b8; font-size:11px;">
-                    Thiết bị: ${escapeHtml(s.platform)} • Còn trong Grace Period 30p: <b style="color:${s.withinGracePeriod ? '#10b981' : '#f59e0b'};">${s.withinGracePeriod ? 'CÓ (Giữ sống)' : 'Chờ Reconnect'}</b>
+                    Thiết bị: <b style="color:#38bdf8;">${escapeHtml(s.platform || s.deviceInfo || 'Web / App / PC')}</b> • Giữ phiên 24/7: <b style="color:${s.withinGracePeriod !== false ? '#10b981' : '#f59e0b'};">${s.withinGracePeriod !== false ? 'ĐANG DUY TRÌ 24/7' : 'Chờ Reconnect'}</b>
                   </div>
                 </div>
-                <span style="font-size:11px; color:#38bdf8;">Hoạt động ${s.idleSeconds}s trước</span>
+                <span style="font-size:11px; color:#38bdf8;">${Number(s.idleSeconds || 0)}s trước</span>
               </div>`
             )
             .join('');
@@ -255,7 +338,7 @@
               <div>
                 <b style="color:#fff;">#${u.id} ${escapeHtml(u.username)}</b> (${escapeHtml(u.role)}) • Số dư: <b style="color:#fbbf24;">${formatVnd(u.wallet ? u.wallet.balanceVnd : 0)}</b>
                 <div style="color:#9be7ff; font-size:11px;">
-                  Key VIP: <code>${escapeHtml((u.wallet && u.wallet.vipKey) || 'Chưa có')}</code> • Treo 24/7: ${(u.wallet && u.wallet.rent247Active) ? '🟢 Đang bật' : '⚪ Chưa thuê'}
+                  Key VIP: <code>${escapeHtml((u.wallet && u.wallet.vipKey) || 'Chưa có')}</code> • Treo 24/7: ${(u.wallet && (u.wallet.active247Enabled || u.wallet.isVipActive)) ? '🟢 Đang bật' : '⚪ Chưa thuê'}
                 </div>
               </div>
               <div style="display:flex; gap:6px;">
@@ -272,6 +355,7 @@
             const amt = Number(btn.getAttribute('data-amt') || 40000);
             await fetch(`/api/admin/commerce/users/${uid}/wallet`, {
               method: 'POST',
+              credentials: 'include',
               headers: authHeaders(),
               body: JSON.stringify({ deltaVnd: amt, grantDays: amt >= 40000 ? 30 : 7 })
             });
@@ -287,6 +371,7 @@
     try {
       const res = await fetch(`/api/admin/commerce/topup/${orderId}/decision`, {
         method: 'POST',
+        credentials: 'include',
         headers: authHeaders(),
         body: JSON.stringify({ action: approve ? 'APPROVE' : 'REJECT' })
       });
@@ -302,6 +387,7 @@
     try {
       const res = await fetch(`/api/admin/commerce/service/${orderId}/status`, {
         method: 'POST',
+        credentials: 'include',
         headers: authHeaders(),
         body: JSON.stringify({ status, adminResponse: `Admin Duy Trường cập nhật: ${status}` })
       });
@@ -316,9 +402,9 @@
   // ==================== TẢI TRẠNG THÁI HỆ THỐNG, CCU & DANH SÁCH TÀI KHOẢN ====================
   async function loadSystemOverview() {
     try {
-      const res = dualClient
+      const res = dualClient && typeof dualClient.fetchWithAuth === 'function'
         ? await dualClient.fetchWithAuth('/api/admin/overview')
-        : await fetch('/api/admin/overview', { headers: authHeaders() });
+        : await fetch('/api/admin/overview', { headers: authHeaders(), credentials: 'include' });
       if (!res.ok) return;
       const data = await res.json();
       const sys = data.system || {};
@@ -328,7 +414,7 @@
         statsEl.innerHTML = `
           <div class="stat-card">
             <div style="font-size:11px; color:#94a3b8;">Hệ Điều Hành Máy Chủ</div>
-            <div style="font-size:15px; font-weight:700; color:#f8fafc; margin-top:4px;">${escapeHtml(sys.platform || 'Linux Cloud')}</div>
+            <div style="font-size:15px; font-weight:700; color:#f8fafc; margin-top:4px;">${escapeHtml(sys.platform || 'Linux Cloud Render 24/7')}</div>
           </div>
           <div class="stat-card">
             <div style="font-size:11px; color:#94a3b8;">RAM Node.js (RSS)</div>
@@ -382,6 +468,7 @@
             const currentlyLocked = btn.getAttribute('data-locked') === '1';
             await fetch(`/api/admin/users/${uid}/lock`, {
               method: 'PUT',
+              credentials: 'include',
               headers: authHeaders(),
               body: JSON.stringify({ locked: !currentlyLocked })
             });
@@ -394,6 +481,21 @@
   }
 
   function bindAdminEvents() {
+    const inlineBtn = document.getElementById('btnInlineAdminLogin');
+    if (inlineBtn) {
+      inlineBtn.addEventListener('click', handleInlineAdminLogin);
+    }
+    const inlinePass = document.getElementById('inlineAdminPass');
+    if (inlinePass) {
+      inlinePass.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleInlineAdminLogin();
+      });
+    }
+    const switchBtn = document.getElementById('btnSwitchToAdminAccount');
+    if (switchBtn) {
+      switchBtn.addEventListener('click', () => showInlineLoginBox());
+    }
+
     const refreshBtn = document.getElementById('refreshAdminBtn');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', async () => {
@@ -413,12 +515,13 @@
 
         const res = await fetch('/api/admin/commerce/events', {
           method: 'POST',
+          credentials: 'include',
           headers: authHeaders(),
           body: JSON.stringify({ active, title, bannerText, discountPercent, topupMultiplier })
         });
         const data = await res.json();
         if (data && data.success) {
-          showToast('👑 Đã cập nhật Sự kiện & Khuyến mãi trên toàn hệ thống Web + App!');
+          showToast('👑 Đã cập nhật Sự kiện & Khuyến mãi trên toàn hệ thống Web + App + PC!');
           loadCommerceOverview();
         }
       });
@@ -431,6 +534,7 @@
         const maxConcurrentSessions = Number(document.getElementById('maxConcurrentInput').value || 50);
         const res = await fetch('/api/admin/settings/concurrency', {
           method: 'PUT',
+          credentials: 'include',
           headers: authHeaders(),
           body: JSON.stringify({ maxConcurrentSessions })
         });
@@ -447,11 +551,12 @@
       logoutBtn.addEventListener('click', async () => {
         await fetch('/api/auth/logout', {
           method: 'POST',
+          credentials: 'include',
           headers: authHeaders(),
           body: JSON.stringify({ refreshToken: dualClient ? dualClient.getRefreshToken() : '' })
         }).catch(() => {});
         if (dualClient) dualClient.clearSessionOnExplicitLogout();
-        window.location.replace('/login.html');
+        showInlineLoginBox();
       });
     }
   }
@@ -459,7 +564,8 @@
   bindAdminEvents();
   verifyAdminAccessAndInit();
   setInterval(() => {
-    if (!dualClient || dualClient.isOnline) {
+    const workspace = document.getElementById('adminMainWorkspace');
+    if (workspace && workspace.style.display !== 'none' && (!dualClient || dualClient.isOnline)) {
       loadCommerceOverview();
     }
   }, 15000);

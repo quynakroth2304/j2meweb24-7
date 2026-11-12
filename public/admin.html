@@ -50,9 +50,58 @@
       color: #94a3b8;
       font-weight: 700;
     }
+    .admin-login-box {
+      max-width: 440px;
+      margin: 60px auto;
+      padding: 28px;
+      border-radius: 20px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .admin-login-input {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: #0b1120;
+      color: #fff;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
   </style>
 </head>
 <body class="cyber-os">
+  <!-- Khung Đăng Nhập Trực Tiếp Trên Trang Admin (Không bao giờ bị màn hình đen/trắng khi chưa đăng nhập) -->
+  <div id="adminLoginBox" class="admin-login-box" style="display:none;">
+    <div style="text-align:center;">
+      <div style="font-size:36px;">👑</div>
+      <h2 style="color:#fbbf24; margin:6px 0 4px 0; font-size:20px;">ĐĂNG NHẬP TRUNG TÂM QUẢN TRỊ ADMIN</h2>
+      <p style="font-size:12px; color:#94a3b8; margin:0;">
+        Hệ thống J2ME Cloud 24/7 &amp; Mạng Kép (Web + Android + Bản Máy Tính PC) — Duy Trường
+      </p>
+    </div>
+    <div>
+      <label style="font-size:12px; color:#cbd5e1; font-weight:700;">Tài khoản Quản trị viên:</label>
+      <input type="text" id="inlineAdminUser" class="admin-login-input" value="admin" placeholder="admin" style="margin-top:4px;" />
+    </div>
+    <div>
+      <label style="font-size:12px; color:#cbd5e1; font-weight:700;">Mật khẩu:</label>
+      <input type="password" id="inlineAdminPass" class="admin-login-input" value="admin123456" placeholder="Nhập mật khẩu admin..." style="margin-top:4px;" />
+    </div>
+    <div id="inlineAdminError" style="color:#f87171; font-size:12px; text-align:center; min-height:16px;"></div>
+    <button id="btnInlineAdminLogin" class="cyber-btn emerald" style="width:100%; padding:11px; font-size:14px; font-weight:800;">
+      👑 Đăng Nhập Vào Bảng Điều Khiển Admin Ngay
+    </button>
+    <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:4px;">
+      <a href="/app" style="color:#38bdf8; text-decoration:none;">🎮 Sang Khu Vực Chơi Game (/app)</a>
+      <a href="/login.html" style="color:#94a3b8; text-decoration:none;">Trang đăng nhập đầy đủ</a>
+    </div>
+  </div>
+
   <!-- Màn hình cảnh báo 403 nếu không phải Admin -->
   <div id="adminForbiddenBox" style="display:none; max-width:520px; margin:80px auto; text-align:center;" class="glass-panel">
     <div style="font-size:42px;">🚫</div>
@@ -60,18 +109,23 @@
     <p style="font-size:14px; color:#cbd5e1;">
       Tài khoản <strong>User</strong> không được phép truy cập bất kỳ trang, menu hay API nào của <strong>Admin</strong>.
     </p>
-    <a href="/app" class="cyber-btn emerald" style="display:inline-block; margin-top:12px; text-decoration:none;">
-      🎮 Quay Về Khu Vực Người Chơi (/app)
-    </a>
+    <div style="display:flex; gap:10px; justify-content:center; margin-top:14px;">
+      <a href="/app" class="cyber-btn emerald" style="text-decoration:none;">
+        🎮 Quay Về Khu Vực Người Chơi (/app)
+      </a>
+      <button id="btnSwitchToAdminAccount" class="cyber-btn primary">
+        👑 Đăng Nhập Bằng Tài Khoản Admin
+      </button>
+    </div>
   </div>
 
-  <!-- Nội dung chính của Admin (chỉ hiển thị khi xác thực đúng role === 'admin') -->
+  <!-- Nội dung chính của Admin (hiển thị khi xác thực đúng role === 'admin') -->
   <div id="adminMainWorkspace" class="admin-container" style="display:none;">
     <header class="glass-panel" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-color:rgba(245,158,11,0.5);">
       <div>
-        <div class="vip-crown-badge">👑 PORTAL QUẢN TRỊ VIÊN TOÀN QUYỀN (ADMIN BRANCH)</div>
+        <div class="vip-crown-badge">👑 PORTAL QUẢN TRỊ VIÊN TOÀN QUYỀN (WEB + ANDROID + PC DESKTOP 24/7)</div>
         <h1 style="font-size:20px; color:#fbbf24; margin:6px 0 2px 0;">
-          Trung Tâm Kiểm Soát Web &amp; App 24/7 — Nguyễn Đức Duy Trường
+          Trung Tâm Kiểm Soát Web, App &amp; Bản Máy Tính 24/7 — Duy Trường
         </h1>
         <div style="font-size:12px; color:#94a3b8;" id="adminHeaderStatus">
           Đang kiểm tra phiên Mạng Kép &amp; quyền Admin...
@@ -93,10 +147,10 @@
       </div>
     </header>
 
-    <!-- 1. CÀI ĐẶT SỰ KIỆN KHUYẾN MÃI & X2 NẠP QR TECHCOMBANK (ĐỒNG BỘ WEB + APP) -->
+    <!-- 1. CÀI ĐẶT SỰ KIỆN KHUYẾN MÃI & X2 NẠP QR TECHCOMBANK (ĐỒNG BỘ WEB + APP + PC) -->
     <section class="glass-panel" style="border-color:rgba(245,158,11,0.45);">
       <h2 style="font-size:16px; color:#fbbf24; margin:0 0 10px 0;">
-        🎁 1. Cài Đặt Sự Kiện Khuyến Mãi &amp; Tri Ân Khách Hàng (Đồng Bộ Tức Thì Web + App)
+        🎁 1. Cài Đặt Sự Kiện Khuyến Mãi &amp; Tri Ân Khách Hàng (Đồng Bộ Tức Thì Web + App + Bản PC)
       </h2>
       <div class="admin-grid-2" style="margin-bottom:10px;">
         <div>
@@ -104,7 +158,7 @@
           <input type="text" id="adminEventTitle" class="cyber-btn" style="width:100%; margin-top:4px;" value="🎉 SỰ KIỆN TRI ÂN KHÁCH HÀNG DUY TRƯỜNG" />
         </div>
         <div>
-          <label style="font-size:12px; color:#94a3b8;">Nội dung Banner chạy trên Web &amp; App:</label>
+          <label style="font-size:12px; color:#94a3b8;">Nội dung Banner chạy trên Web, App &amp; PC:</label>
           <input type="text" id="adminEventBanner" class="cyber-btn" style="width:100%; margin-top:4px;" value="🔥 Khuyến mãi X2 nạp tiền QR Techcombank & Bảng giá 1 ngày 3k, 1 tuần 15k, 1 tháng 40k!" />
         </div>
       </div>
@@ -145,22 +199,22 @@
       </section>
     </div>
 
-    <!-- 3. GIÁM SÁT PHIÊN MẠNG KÉP (DUAL-CONNECTION GRACE PERIOD) & VÍ NGƯỜI DÙNG -->
+    <!-- 3. GIÁM SÁT PHIÊN MẠNG KÉP (WEB + ANDROID + BẢN MÁY TÍNH PC DESKTOP) & VÍ NGƯỜI DÙNG -->
     <div class="admin-grid-2">
       <section class="glass-panel">
         <h2 style="font-size:15px; color:#a855f7; margin:0 0 8px 0;">
-          🛡️ 4. Phiên Mạng Kép (Dual-Connection Grace Period 30 Phút &amp; Refresh Token)
+          🛡️ 4. Phiên Mạng Kép 24/7 (Web + Android + Bản Máy Tính PC Đang Duy Trì)
         </h2>
-        <div id="adminDualSessionsBox" style="max-height:240px; overflow-y:auto; font-size:12px;">
-          Đang tải danh sách phiên Mạng Kép...
+        <div id="adminDualSessionsBox" style="max-height:260px; overflow-y:auto; font-size:12px;">
+          Đang tải danh sách phiên Mạng Kép &amp; Bản Máy Tính PC...
         </div>
       </section>
 
       <section class="glass-panel">
         <h2 style="font-size:15px; color:#fbbf24; margin:0 0 8px 0;">
-          💰 5. Quản Lý Ví &amp; Cấp Hạn VIP 24/7 Nhanh (Web + App)
+          💰 5. Quản Lý Ví &amp; Cấp Hạn VIP 24/7 Nhanh (Web + App + PC)
         </h2>
-        <div id="adminUsersHeartbeatList" style="max-height:240px; overflow-y:auto; font-size:12px;">
+        <div id="adminUsersHeartbeatList" style="max-height:260px; overflow-y:auto; font-size:12px;">
           Đang tải danh sách ví người dùng...
         </div>
       </section>
@@ -170,7 +224,7 @@
     <section class="glass-panel">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
         <h2 style="font-size:15px; color:#10b981; margin:0;">
-          🖥️ 6. Trạng Thái Máy Chủ, CCU &amp; Danh Sách Tài Khoản
+          🖥️ 6. Trạng Thái Máy Chủ Render 24/7, CCU &amp; Danh Sách Tài Khoản
         </h2>
         <form id="concurrencyForm" style="display:flex; align-items:center; gap:8px;">
           <label for="maxConcurrentInput" style="font-size:12px; color:#94a3b8;">Giới hạn CCU:</label>

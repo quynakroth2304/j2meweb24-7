@@ -16,7 +16,9 @@
   class DualConnectionClient {
     constructor(options = {}) {
       this.onNetworkChange = options.onNetworkChange || (() => {});
+      this.onStatusChange = options.onStatusChange || (() => {});
       this.onAuthSynced = options.onAuthSynced || (() => {});
+      this.onSessionUpdated = options.onSessionUpdated || (() => {});
       this.onQueueFlushed = options.onQueueFlushed || (() => {});
       this.onToast = options.onToast || (() => {});
 
@@ -27,14 +29,33 @@
 
       this.accessToken = this._readLocal(STORAGE_KEYS.ACCESS_TOKEN) || '';
       this.refreshToken = this._readLocal(STORAGE_KEYS.REFRESH_TOKEN) || '';
-      this.user = this._readJson(STORAGE_KEYS.USER_PROFILE, null);
+      this.user = this._readJson(STORAGE_KEYS.USER_PROFILE, null) || this._readJson('j2me_user', null);
       this.wallet = this._readJson(STORAGE_KEYS.WALLET_CACHE, null);
       this.offlineQueue = this._readJson(STORAGE_KEYS.OFFLINE_QUEUE, []);
+      if (!Array.isArray(this.offlineQueue)) {
+        this.offlineQueue = [];
+      }
 
       this._initIndexedDbMirror();
       this._ensureStatusBannerDom();
       this._bindNetworkEvents();
       this._updateBannerUi();
+    }
+
+    _notifyStatusChange() {
+      const st = {
+        isOnline: this.isOnline,
+        queueLength: this.getOfflineQueueLength(),
+        user: this.user,
+        wallet: this.wallet
+      };
+      try { this.onNetworkChange(this.isOnline); } catch (_) {}
+      try { this.onStatusChange(st); } catch (_) {}
+    }
+
+    _notifySessionUpdated() {
+      try { this.onAuthSynced(this.user, this.wallet); } catch (_) {}
+      try { this.onSessionUpdated(this.user, this.wallet); } catch (_) {}
     }
 
     _readLocal(key) {
@@ -86,7 +107,6 @@
         };
         req.onsuccess = (e) => {
           this.idb = e.target.result;
-          // Khôi phục từ IndexedDB nếu localStorage bị trống
           if (!this.accessToken) {
             this._restoreFromIdb();
           }
@@ -123,15 +143,43 @@
         getKey(STORAGE_KEYS.USER_PROFILE, (v) => {
           try {
             this.user = JSON.parse(v);
-            this.onAuthSynced(this.user, this.wallet);
+            this._notifySessionUpdated();
           } catch (_) {}
         });
       } catch (_) {}
     }
 
+    // ==================== GETTERS & HELPERS TƯƠNG THÍCH TOÀN BỘ WEB PORTAL ====================
+
+    getAccessToken() {
+      return this.accessToken || this._readLocal(STORAGE_KEYS.ACCESS_TOKEN) || '';
+    }
+
+    getRefreshToken() {
+      return this.refreshToken || this._readLocal(STORAGE_KEYS.REFRESH_TOKEN) || '';
+    }
+
+    getUser() {
+      if (!this.user) {
+        this.user = this._readJson(STORAGE_KEYS.USER_PROFILE, null) || this._readJson('j2me_user', null);
+      }
+      return this.user || null;
+    }
+
+    getWallet() {
+      if (!this.wallet) {
+        this.wallet = this._readJson(STORAGE_KEYS.WALLET_CACHE, null);
+      }
+      return this.wallet || null;
+    }
+
+    getOfflineQueueLength() {
+      return Array.isArray(this.offlineQueue) ? this.offlineQueue.length : 0;
+    }
+
     // ==================== LƯU & ĐỒNG BỘ PHIÊN ĐĂNG NHẬP ====================
 
-    saveSession({ accessToken, token, refreshToken, user, wallet }) {
+    saveSession({ accessToken, token, refreshToken, user, wallet } = {}) {
       const finalAccess = accessToken || token || this.accessToken;
       if (finalAccess) {
         this.accessToken = finalAccess;
@@ -144,13 +192,14 @@
       if (user) {
         this.user = user;
         this._writeJson(STORAGE_KEYS.USER_PROFILE, user);
-        this._writeJson('j2me_user', user); // Tương thích ngược
+        this._writeJson('j2me_user', user);
       }
       if (wallet) {
         this.wallet = wallet;
         this._writeJson(STORAGE_KEYS.WALLET_CACHE, wallet);
       }
-      this.onAuthSynced(this.user, this.wallet);
+      this._notifySessionUpdated();
+      this._notifyStatusChange();
     }
 
     clearSessionOnlyOnExplicitRevoke() {
@@ -163,7 +212,12 @@
       this._writeLocal(STORAGE_KEYS.USER_PROFILE, null);
       this._writeLocal(STORAGE_KEYS.WALLET_CACHE, null);
       this._writeLocal('j2me_user', null);
-      this.onAuthSynced(null, null);
+      this._notifySessionUpdated();
+      this._notifyStatusChange();
+    }
+
+    clearSessionOnExplicitLogout() {
+      this.clearSessionOnlyOnExplicitRevoke();
     }
 
     isLoggedIn() {
@@ -174,14 +228,10 @@
       return Boolean(this.user && this.user.role === 'admin');
     }
 
-    /**
-     * Chặn phân quyền (RBAC Guard) phía Frontend:
-     * - Nếu trang yêu cầu quyền 'admin' mà tài khoản là 'user' -> chặn ngay lập tức và chuyển về '/app' (/play.html)
-     */
     enforceRouteGuard(requiredRole = 'user') {
       if (requiredRole === 'admin') {
         if (!this.user) {
-          return { allowed: false, reason: 'UNAUTHENTICATED', redirectTo: '/play.html?login=1' };
+          return { allowed: false, reason: 'UNAUTHENTICATED', redirectTo: '/login.html' };
         }
         if (this.user.role !== 'admin') {
           return { allowed: false, reason: 'FORBIDDEN_USER_ROLE', redirectTo: '/play.html?error=forbidden_admin' };
@@ -195,33 +245,43 @@
         'Content-Type': 'application/json',
         ...extra
       };
-      if (this.accessToken) {
-        headers.Authorization = `Bearer ${this.accessToken}`;
+      const tok = this.getAccessToken();
+      const rtk = this.getRefreshToken();
+      if (tok) {
+        headers.Authorization = `Bearer ${tok}`;
       }
-      if (this.refreshToken) {
-        headers['X-Refresh-Token'] = this.refreshToken;
+      if (rtk) {
+        headers['X-Refresh-Token'] = rtk;
       }
       return headers;
+    }
+
+    authHeaders(extra = {}) {
+      return this.buildHeaders(extra);
     }
 
     // ==================== GIAO TIẾP API VỚI TỰ ĐỘNG REFRESH TOKEN & HÀNG ĐỢI OFFLINE ====================
 
     async fetchWithDualAuth(url, options = {}) {
       const headers = this.buildHeaders(options.headers || {});
+      const fetchOpts = {
+        credentials: 'include',
+        ...options,
+        headers
+      };
       try {
-        const res = await fetch(url, { ...options, headers });
-        const refreshedToken = res.headers.get('X-Refreshed-Access-Token');
+        const res = await fetch(url, fetchOpts);
+        const refreshedToken = res.headers.get('X-Refreshed-Access-Token') || res.headers.get('X-Renewed-Access-Token');
         if (refreshedToken) {
           this.accessToken = refreshedToken;
           this._writeLocal(STORAGE_KEYS.ACCESS_TOKEN, refreshedToken);
         }
 
-        if (res.status === 401 && this.refreshToken) {
-          // Thử dùng Refresh Token cấp lại Access Token mà không bắt đăng nhập lại
+        if (res.status === 401 && this.getRefreshToken()) {
           const renewed = await this.tryRefreshAccessToken();
           if (renewed) {
             const retryHeaders = this.buildHeaders(options.headers || {});
-            return await fetch(url, { ...options, headers: retryHeaders });
+            return await fetch(url, { ...fetchOpts, headers: retryHeaders });
           }
         }
 
@@ -230,32 +290,36 @@
         }
         return res;
       } catch (networkErr) {
-        // Mất mạng -> Chuyển sang chế độ Offline, tuyệt đối KHÔNG logout
         this._setOnlineState(false);
         throw networkErr;
       }
     }
 
+    async fetchWithAuth(url, options = {}) {
+      return this.fetchWithDualAuth(url, options);
+    }
+
     async tryRefreshAccessToken() {
-      if (!this.refreshToken) return false;
+      const rtk = this.getRefreshToken();
+      if (!rtk) return false;
       try {
         const res = await fetch('/api/auth/refresh', {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: this.refreshToken })
+          body: JSON.stringify({ refreshToken: rtk })
         });
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
-            // Chỉ khi cả Refresh Token thật sự hết hạn hoặc bị thu hồi mới yêu cầu đăng nhập lại
             this.clearSessionOnlyOnExplicitRevoke();
           }
           return false;
         }
         const data = await res.json();
-        if (data && data.accessToken) {
+        if (data && (data.accessToken || data.token)) {
           this.saveSession({
-            accessToken: data.accessToken,
-            refreshToken: data.refreshToken || this.refreshToken,
+            accessToken: data.accessToken || data.token,
+            refreshToken: data.refreshToken || rtk,
             user: data.user || this.user,
             wallet: data.wallet || this.wallet
           });
@@ -263,7 +327,6 @@
         }
         return false;
       } catch (_) {
-        // Đang mất mạng -> giữ nguyên phiên cục bộ, không xóa token
         this._setOnlineState(false);
         return false;
       }
@@ -284,6 +347,7 @@
       }
       this._writeJson(STORAGE_KEYS.OFFLINE_QUEUE, this.offlineQueue);
       this._updateBannerUi();
+      this._notifyStatusChange();
       return action;
     }
 
@@ -291,7 +355,7 @@
       if (this.flushingQueue || !this.isOnline || this.offlineQueue.length === 0) {
         return;
       }
-      if (!this.accessToken && !this.refreshToken) {
+      if (!this.getAccessToken() && !this.getRefreshToken()) {
         return;
       }
       this.flushingQueue = true;
@@ -315,14 +379,18 @@
           this.onToast(`☁️ Đã đồng bộ ${batch.length} thao tác Offline lên Server thành công!`);
         }
       } catch (_) {
-        // Sẽ thử lại ở chu kỳ Exponential Backoff tiếp theo
       } finally {
         this.flushingQueue = false;
         this._updateBannerUi();
+        this._notifyStatusChange();
       }
     }
 
     // ==================== THEO DÕI MẠNG & RECONNECT EXPONENTIAL BACKOFF (1s -> 30s) ====================
+
+    handleNetworkChange(online) {
+      this._setOnlineState(online);
+    }
 
     _bindNetworkEvents() {
       if (!global.addEventListener) return;
@@ -334,7 +402,6 @@
         this._setOnlineState(false);
       });
 
-      // Kiểm tra nhịp tim định kỳ mỗi 10s
       setInterval(() => {
         if (global.navigator && global.navigator.onLine === false) {
           this._setOnlineState(false);
@@ -347,7 +414,7 @@
     async _verifyRealConnectivityNow() {
       try {
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        const timer = controller ? setTimeout(() => controller.abort(), 3500) : null;
+        const timer = controller ? setTimeout(() => controller.abort(), 4500) : null;
         const res = await fetch('/api/health', {
           method: 'GET',
           cache: 'no-store',
@@ -359,7 +426,7 @@
           this._setOnlineState(true);
           this.backoffAttempt = 0;
           if (wasOffline) {
-            if (this.refreshToken) {
+            if (this.getRefreshToken()) {
               await this.tryRefreshAccessToken();
             }
             await this.flushOfflineQueue();
@@ -377,7 +444,6 @@
 
     _scheduleExponentialReconnect() {
       if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-      // Exponential backoff: 1s, 2s, 4s, 8s, 16s, tối đa 30s
       const delaySec = Math.min(30, Math.pow(2, this.backoffAttempt));
       this.backoffAttempt = Math.min(6, this.backoffAttempt + 1);
       this._updateBannerUi('reconnecting', delaySec);
@@ -392,15 +458,13 @@
       this.isOnline = Boolean(online);
       this._updateBannerUi();
       if (changed) {
-        this.onNetworkChange(this.isOnline);
+        this._notifyStatusChange();
         if (!this.isOnline) {
           this.onToast('📡 Đang offline, dữ liệu và tiến trình game sẽ tự đồng bộ khi có mạng!');
           this._scheduleExponentialReconnect();
         }
       }
     }
-
-    // ==================== THANH THÔNG BÁO MẠNG KÉP (NON-BLOCKING BANNER) ====================
 
     _ensureStatusBannerDom() {
       if (!global.document || !global.document.body) return;
@@ -432,7 +496,7 @@
       const bar = global.document.getElementById('dualNetStatusBanner');
       if (!bar) return;
 
-      const qCount = this.offlineQueue.length;
+      const qCount = this.getOfflineQueueLength();
       if (!this.isOnline) {
         bar.style.display = 'flex';
         bar.style.background = 'rgba(180, 83, 9, 0.95)';

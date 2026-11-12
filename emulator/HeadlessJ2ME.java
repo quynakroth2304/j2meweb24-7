@@ -1063,7 +1063,13 @@ private static boolean setModNativeLevelFarm(RefCache ref, boolean enable, int p
             } catch (Throwable ignored) {}
         }
     }
-public static void exitVM(int code) {
+    private static volatile boolean preventSystemExit = false;
+
+    public static void setPreventSystemExit(boolean prevent) {
+        preventSystemExit = prevent;
+    }
+
+    public static void exitVM(int code) {
         try {
             shutdownTenant();
         } catch (Throwable ignored) {}
@@ -1073,6 +1079,10 @@ public static void exitVM(int code) {
             exitMethod.invoke(null, code);
             return;
         } catch (Throwable ignored) {}
+        if (preventSystemExit) {
+            System.err.println("[VM] Đã chặn lệnh thoát máy ảo (code=" + code + ") để giữ cửa sổ PC luôn mở.");
+            return;
+        }
         System.exit(code);
     }
     // =========================================================================
@@ -1108,7 +1118,31 @@ public static void exitVM(int code) {
             System.setProperty("microedition.encoding", "UTF-8");
 
             File jarFile = new File(jarPath);
-            if (!jarFile.exists()) exitVM(1);
+            if (!jarFile.exists() || jarFile.length() == 0) {
+                try (java.io.InputStream embIn = HeadlessJ2ME.class.getResourceAsStream("/embedded/HSO-402-VIP-0.jar")) {
+                    if (embIn != null) {
+                        File fallbackDir = new File(System.getProperty("java.io.tmpdir", "."), "HSO-DuyTruong-PC");
+                        fallbackDir.mkdirs();
+                        File fallbackJar = new File(fallbackDir, "HSO-402-VIP-DuyTruong.jar");
+                        try (FileOutputStream fos = new FileOutputStream(fallbackJar)) {
+                            byte[] buf = new byte[8192];
+                            int n;
+                            while ((n = embIn.read(buf)) > 0) {
+                                fos.write(buf, 0, n);
+                            }
+                        }
+                        if (fallbackJar.exists() && fallbackJar.length() > 0) {
+                            jarFile = fallbackJar;
+                            loadedJarPath = fallbackJar.getAbsolutePath();
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+            if (!jarFile.exists()) {
+                System.err.println("[VM][ERROR] Không tìm thấy file JAR game tại: " + jarFile.getAbsolutePath());
+                exitVM(1);
+                return;
+            }
 
             System.err.println("[VM] Kh\u1edfi t\u1ea1o MobilePlatform (" + width + "x" + height + " @ 30FPS)...");
             platform = new MobilePlatform(width, height);

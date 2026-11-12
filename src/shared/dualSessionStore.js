@@ -1,4 +1,4 @@
-// src/shared/dualSessionStore.js — Quản Lý Phiên Mạng Kép (Dual-Connection), Refresh Token & Đồng Bộ Hàng Đợi Offline Chống Ghi Trùng
+// src/shared/dualSessionStore.js — Quản Lý Phiên Mạng Kép (Dual-Connection), Refresh Token, Đồng Bộ Bản PC Desktop & Hàng Đợi Offline
 'use strict';
 
 const fs = require('fs');
@@ -21,18 +21,20 @@ class DualSessionStore {
   _load() {
     if (!fs.existsSync(this.filePath)) {
       return {
-        refreshTokens: {}, // refreshToken -> { userId, username, role, deviceInfo, issuedAt, expiresAt, lastSeenAt, graceUntil, revoked }
-        processedActions: {} // actionId -> { userId, type, processedAt, clientTimestamp }
+        refreshTokens: {},
+        pcSessions: {},
+        processedActions: {}
       };
     }
     try {
       const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
       return {
         refreshTokens: parsed.refreshTokens || {},
+        pcSessions: parsed.pcSessions || {},
         processedActions: parsed.processedActions || {}
       };
     } catch (_) {
-      return { refreshTokens: {}, processedActions: {} };
+      return { refreshTokens: {}, pcSessions: {}, processedActions: {} };
     }
   }
 
@@ -44,6 +46,15 @@ class DualSessionStore {
     } catch (_) {}
   }
 
+  _formatPlatform(deviceInfo) {
+    if (!deviceInfo) return 'Web / Android / PC';
+    if (typeof deviceInfo === 'string') return deviceInfo;
+    if (typeof deviceInfo === 'object') {
+      return String(deviceInfo.platform || deviceInfo.userAgent || 'Web / Android / PC').slice(0, 80);
+    }
+    return 'Web / Android / PC';
+  }
+
   issueTokenPair(user, deviceInfo = '') {
     const accessToken = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
@@ -53,11 +64,14 @@ class DualSessionStore {
 
     const refreshToken = `rtk_${user.id}_${crypto.randomBytes(24).toString('hex')}`;
     const now = Date.now();
+    const platformStr = this._formatPlatform(deviceInfo);
+
     this._state.refreshTokens[refreshToken] = {
       userId: Number(user.id),
       username: user.username,
       role: user.role,
-      deviceInfo: String(deviceInfo || 'Web / Android'),
+      platform: platformStr,
+      deviceInfo: platformStr,
       issuedAt: now,
       lastSeenAt: now,
       graceUntil: now + SESSION_GRACE_PERIOD_MS,
@@ -75,14 +89,60 @@ class DualSessionStore {
     };
   }
 
-  touchSessionByUser(userId) {
+  touchSessionByUser(userId, platformOverride = '') {
     const now = Date.now();
     for (const rec of Object.values(this._state.refreshTokens)) {
       if (rec.userId === Number(userId) && !rec.revoked) {
         rec.lastSeenAt = now;
         rec.graceUntil = now + SESSION_GRACE_PERIOD_MS;
+        if (platformOverride) {
+          rec.platform = String(platformOverride);
+          rec.deviceInfo = String(platformOverride);
+        }
       }
     }
+  }
+
+  /**
+   * Ghi nhận & duy trì phiên Mạng Kép 24/7 cho người chơi Bản Máy Tính (PC Desktop Launcher)
+   */
+  recordPcClientSession(payload = {}) {
+    if (!this._state.pcSessions) this._state.pcSessions = {};
+    const now = Date.now();
+    const pcId = String(payload.pcClientId || payload.gameUsername || payload.username || 'pc_default').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64);
+    const prev = this._state.pcSessions[pcId] || {};
+
+    this._state.pcSessions[pcId] = {
+      pcClientId: pcId,
+      userId: Number(payload.userId || prev.userId || 1),
+      username: String(payload.username || payload.gameUsername || prev.username || `PC_${pcId}`),
+      gameUsername: String(payload.gameUsername || prev.gameUsername || ''),
+      charName: String(payload.charName || prev.charName || ''),
+      level: Number(payload.level ?? prev.level ?? 1),
+      mapName: String(payload.mapName || prev.mapName || 'Đang trong game'),
+      autoQuest: Boolean(payload.autoQuest ?? prev.autoQuest ?? false),
+      questScope: String(payload.questScope || prev.questScope || 'ALL'),
+      cloudMaintain247: Boolean(payload.cloudMaintain247 ?? prev.cloudMaintain247 ?? true),
+      stateText: String(payload.stateText || prev.stateText || 'Đang kết nối Mạng Kép PC 24/7'),
+      platform: String(payload.platform || 'PC Desktop (Windows/Mac/Linux)'),
+      role: String(payload.role || prev.role || 'user'),
+      lastSeenAt: now,
+      graceUntil: now + 24 * 60 * 60 * 1000 // Giữ phiên 24h cho máy tính
+    };
+    this._saveAtomic();
+    return this._state.pcSessions[pcId];
+  }
+
+  listPcSessions() {
+    if (!this._state.pcSessions) return [];
+    const now = Date.now();
+    return Object.values(this._state.pcSessions)
+      .sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0))
+      .map((s) => ({
+        ...s,
+        withinGracePeriod: (s.graceUntil || 0) > now,
+        idleSeconds: Math.max(0, Math.round((now - (s.lastSeenAt || now)) / 1000))
+      }));
   }
 
   getSessionStatus(userId) {
@@ -101,6 +161,8 @@ class DualSessionStore {
       userId: uid,
       online: true,
       dualNetworkActive: true,
+      withinGracePeriod: graceUntil > now,
+      idleSeconds: latestRec ? Math.max(0, Math.round((now - (latestRec.lastSeenAt || now)) / 1000)) : 0,
       lastSeenAt: latestRec ? new Date(latestRec.lastSeenAt).toISOString() : new Date(now).toISOString(),
       graceUntil: new Date(graceUntil).toISOString(),
       graceRemainingSec: Math.max(0, Math.round((graceUntil - now) / 1000)),
@@ -110,28 +172,56 @@ class DualSessionStore {
 
   listAllActiveSessions() {
     const now = Date.now();
-    const byUser = new Map();
+    const byKey = new Map();
+
     for (const rec of Object.values(this._state.refreshTokens)) {
       if (!rec || rec.revoked || (rec.expiresAt && rec.expiresAt <= now)) continue;
-      const prev = byUser.get(rec.userId);
+      const key = `user_${rec.userId}`;
+      const prev = byKey.get(key);
       if (!prev || (rec.lastSeenAt || 0) > (prev.lastSeenAt || 0)) {
-        byUser.set(rec.userId, rec);
+        const graceUntil = rec.graceUntil || ((rec.lastSeenAt || now) + SESSION_GRACE_PERIOD_MS);
+        const withinGracePeriod = graceUntil > now;
+        const platformStr = this._formatPlatform(rec.platform || rec.deviceInfo);
+        byKey.set(key, {
+          userId: rec.userId,
+          username: rec.username,
+          role: rec.role || 'user',
+          platform: platformStr,
+          deviceInfo: platformStr,
+          withinGracePeriod,
+          idleSeconds: Math.max(0, Math.round((now - (rec.lastSeenAt || now)) / 1000)),
+          lastSeenAt: new Date(rec.lastSeenAt || now).toISOString(),
+          graceUntil: new Date(graceUntil).toISOString(),
+          graceRemainingSec: Math.max(0, Math.round((graceUntil - now) / 1000)),
+          status: withinGracePeriod ? 'ONLINE_OR_GRACE' : 'IDLE_SAVED'
+        });
       }
     }
-    return Array.from(byUser.values()).map((rec) => {
-      const graceUntil = rec.graceUntil || ((rec.lastSeenAt || now) + SESSION_GRACE_PERIOD_MS);
-      const inGraceWindow = graceUntil > now;
-      return {
-        userId: rec.userId,
-        username: rec.username,
-        role: rec.role,
-        deviceInfo: rec.deviceInfo || 'Web / Android',
-        lastSeenAt: new Date(rec.lastSeenAt || now).toISOString(),
-        graceUntil: new Date(graceUntil).toISOString(),
-        graceRemainingSec: Math.max(0, Math.round((graceUntil - now) / 1000)),
-        status: inGraceWindow ? 'ONLINE_OR_GRACE' : 'IDLE_SAVED'
-      };
-    });
+
+    // Gộp cả các phiên Bản Máy Tính (PC Desktop Launcher) đang duy trì 24/7
+    if (this._state.pcSessions) {
+      for (const pc of Object.values(this._state.pcSessions)) {
+        if (!pc) continue;
+        const graceUntil = pc.graceUntil || ((pc.lastSeenAt || now) + 24 * 60 * 60 * 1000);
+        const withinGracePeriod = graceUntil > now;
+        const key = `pc_${pc.pcClientId}`;
+        byKey.set(key, {
+          userId: pc.userId || 1,
+          username: pc.gameUsername ? `${pc.username} (TK Game: ${pc.gameUsername})` : pc.username,
+          role: pc.role || 'pc-client',
+          platform: `${pc.platform || 'PC Desktop'} • ${pc.mapName || 'In-Game'} • AutoNV: ${pc.autoQuest ? 'BẬT' : 'TẮT'}`,
+          deviceInfo: pc.platform || 'PC Desktop',
+          withinGracePeriod,
+          idleSeconds: Math.max(0, Math.round((now - (pc.lastSeenAt || now)) / 1000)),
+          lastSeenAt: new Date(pc.lastSeenAt || now).toISOString(),
+          graceUntil: new Date(graceUntil).toISOString(),
+          graceRemainingSec: Math.max(0, Math.round((graceUntil - now) / 1000)),
+          status: withinGracePeriod ? 'PC_247_ACTIVE' : 'IDLE_SAVED'
+        });
+      }
+    }
+
+    return Array.from(byKey.values()).sort((a, b) => a.idleSeconds - b.idleSeconds);
   }
 
   refreshAccessToken(refreshToken, userStore) {
@@ -175,16 +265,11 @@ class DualSessionStore {
     }
   }
 
-  /**
-   * Xử lý hàng đợi Offline (Offline Queue) gửi từ Client khi có mạng trở lại.
-   * Sắp xếp theo clientTimestamp tăng dần và chống ghi trùng bằng actionId.
-   */
   async processOfflineQueue(user, actions = [], handlers = {}) {
     if (!Array.isArray(actions) || actions.length === 0) {
       return { processedCount: 0, skippedDuplicateCount: 0, results: [] };
     }
 
-    // Sắp xếp đúng thứ tự thời gian người chơi thao tác lúc offline
     const sorted = [...actions].sort(
       (a, b) => (Number(a.clientTimestamp) || 0) - (Number(b.clientTimestamp) || 0)
     );
@@ -231,7 +316,6 @@ class DualSessionStore {
       }
     }
 
-    // Giới hạn lịch sử 2000 actionId gần nhất để tối ưu bộ nhớ
     const keys = Object.keys(this._state.processedActions);
     if (keys.length > 2000) {
       for (const k of keys.slice(0, keys.length - 2000)) {
@@ -248,7 +332,6 @@ class DualSessionStore {
   }
 }
 
-// Hỗ trợ cả hai kiểu import: const DualSessionStore = require(...) VÀ const { DualSessionStore, SESSION_GRACE_PERIOD_MS } = require(...)
 DualSessionStore.DualSessionStore = DualSessionStore;
 DualSessionStore.SESSION_GRACE_PERIOD_MS = SESSION_GRACE_PERIOD_MS;
 DualSessionStore.REFRESH_TOKEN_TTL_MS = REFRESH_TOKEN_TTL_MS;

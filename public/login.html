@@ -4,26 +4,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Đăng Nhập - J2ME Cloud</title>
+    <title>Đăng Nhập Hệ Thống - J2ME Cloud 24/7 Duy Trường</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
         rel="stylesheet">
     <style>
         :root {
-            --bg-deep: #0B0B13;
-            --panel-bg: rgba(21, 21, 33, 0.85);
+            --bg-deep: #0B1120;
+            --panel-bg: rgba(17, 24, 39, 0.92);
             --primary: #06b6d4;
         }
 
         * {
             box-sizing: border-box;
-            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
         }
 
         body {
             margin: 0;
             padding: 16px;
             min-height: 100vh;
-            background: var(--bg-deep);
+            background: radial-gradient(circle at top, #1e293b 0%, #0b1120 70%);
             color: #f1f5f9;
             display: flex;
             align-items: center;
@@ -33,26 +33,26 @@
         .login-card {
             background: var(--panel-bg);
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.25);
             border-radius: 24px;
             padding: 32px;
             width: 100%;
-            max-width: 400px;
+            max-width: 420px;
             box-shadow: 0 25px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(6, 182, 212, 0.15);
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 14px;
         }
 
         h2 {
-            margin: 0 0 4px;
-            color: var(--primary);
+            margin: 0 0 2px;
+            color: #38bdf8;
             font-size: 22px;
             text-align: center;
         }
 
         p {
-            margin: 0 0 12px;
+            margin: 0 0 8px;
             font-size: 13px;
             color: #94a3b8;
             text-align: center;
@@ -71,9 +71,9 @@
         }
 
         input {
-            background: rgba(8, 12, 22, 0.9);
+            background: rgba(8, 12, 22, 0.95);
             color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(148, 163, 184, 0.28);
             padding: 11px 14px;
             border-radius: 12px;
             font-size: 14px;
@@ -95,14 +95,30 @@
             font-weight: 700;
             font-size: 15px;
             cursor: pointer;
-            margin-top: 8px;
+            margin-top: 4px;
             box-shadow: 0 6px 20px rgba(6, 182, 212, 0.3);
             transition: 0.15s ease;
         }
 
         .btn-submit:hover {
             filter: brightness(1.1);
-            transform: translateY(-2px);
+            transform: translateY(-1px);
+        }
+
+        .btn-quick-admin {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.45);
+            padding: 9px 12px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 12px;
+            cursor: pointer;
+            transition: 0.15s ease;
+        }
+
+        .btn-quick-admin:hover {
+            background: rgba(245, 158, 11, 0.25);
         }
 
         .error-msg {
@@ -129,43 +145,56 @@
 
 <body>
     <div class="login-card">
-        <h2 id="formTitle">J2ME Cloud Portal</h2>
-        <p id="formSubtitle">Đăng nhập hệ thống để quản lý máy ảo & chơi game 24/7</p>
+        <h2 id="formTitle">J2ME Cloud 24/7 — Duy Trường</h2>
+        <p id="formSubtitle">Đăng nhập chung cho cả Người chơi &amp; Quản trị viên (Admin)</p>
 
         <div class="form-group">
             <label>Tài khoản</label>
-            <input type="text" id="username" placeholder="Nhập admin hoặc tên tài khoản...">
+            <input type="text" id="username" placeholder="Nhập admin hoặc tên tài khoản..." value="admin">
         </div>
         <div class="form-group">
             <label>Mật khẩu</label>
-            <input type="password" id="password" placeholder="Nhập mật khẩu (tối thiểu 4 ký tự)...">
+            <input type="password" id="password" placeholder="Nhập mật khẩu (tối thiểu 4 ký tự)..." value="admin123456">
         </div>
         <div class="error-msg" id="errorMsg"></div>
-        <button class="btn-submit" id="submitBtn" onclick="submitAuth()">Đăng Nhập Ngay</button>
+        <button class="btn-submit" id="submitBtn" onclick="submitAuth()">🚀 Đăng Nhập Ngay</button>
+        <button class="btn-quick-admin" type="button" onclick="quickFillAdmin()">👑 Điền Nhanh Admin Mặc Định (admin / admin123456)</button>
 
         <div class="switch-mode">
             <span id="switchPrompt">Chưa có tài khoản?</span>
             <a onclick="toggleMode()" id="switchAction">Đăng ký mới</a>
         </div>
 
-        <a href="/terms.html"
-            style="text-align: center; font-size: 11px; color: #64748b; text-decoration: none; margin-top: 4px;">Điều
-            khoản & Bản quyền</a>
+        <div style="display:flex; justify-content:space-between; font-size:11px; margin-top:4px;">
+            <a href="/app" style="color:#10b981; text-decoration:none; font-weight:700;">🎮 Vào Khu Vực Game (/app)</a>
+            <a href="/admin.html" style="color:#fbbf24; text-decoration:none; font-weight:700;">👑 Trang Admin (/admin)</a>
+        </div>
     </div>
 
     <script>
         let isRegister = false;
 
+        function quickFillAdmin() {
+            isRegister = false;
+            document.getElementById('username').value = 'admin';
+            document.getElementById('password').value = 'admin123456';
+            submitAuth();
+        }
+
         function toggleMode() {
             isRegister = !isRegister;
-            document.getElementById('formTitle').innerText = isRegister ? 'Đăng Ký Tài Khoản' : 'J2ME Cloud Portal';
+            document.getElementById('formTitle').innerText = isRegister ? 'Đăng Ký Tài Khoản' : 'J2ME Cloud 24/7 — Duy Trường';
             document.getElementById('formSubtitle').innerText = isRegister
                 ? 'Tạo tài khoản mới và nhận ngay Máy Ảo J2ME 24/7'
-                : 'Đăng nhập hệ thống để quản lý máy ảo & chơi game 24/7';
-            document.getElementById('submitBtn').innerText = isRegister ? 'Tạo Tài Khoản' : 'Đăng Nhập Ngay';
+                : 'Đăng nhập chung cho cả Người chơi & Quản trị viên (Admin)';
+            document.getElementById('submitBtn').innerText = isRegister ? '✨ Tạo Tài Khoản' : '🚀 Đăng Nhập Ngay';
             document.getElementById('switchPrompt').innerText = isRegister ? 'Đã có tài khoản?' : 'Chưa có tài khoản?';
             document.getElementById('switchAction').innerText = isRegister ? 'Đăng nhập' : 'Đăng ký mới';
             document.getElementById('errorMsg').innerText = '';
+            if (isRegister) {
+                document.getElementById('username').value = '';
+                document.getElementById('password').value = '';
+            }
         }
 
         async function submitAuth() {
@@ -185,8 +214,8 @@
                 const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ username, password })
+                    credentials: 'include',
+                    body: JSON.stringify({ username, password, platform: 'Web Portal' })
                 });
 
                 const data = await res.json();
@@ -195,8 +224,27 @@
                     return;
                 }
 
-                localStorage.setItem('j2me_user', JSON.stringify(data.user));
-                window.location.href = '/dashboard.html';
+                const accessToken = data.accessToken || data.token || '';
+                const refreshToken = data.refreshToken || '';
+                if (accessToken) localStorage.setItem('duytruong_auth_token', accessToken);
+                if (refreshToken) localStorage.setItem('duytruong_refresh_token', refreshToken);
+                if (data.user) {
+                    localStorage.setItem('duytruong_user_profile', JSON.stringify(data.user));
+                    localStorage.setItem('j2me_user', JSON.stringify(data.user));
+                }
+                if (data.wallet) {
+                    localStorage.setItem('duytruong_wallet_cache', JSON.stringify(data.wallet));
+                }
+
+                const params = new URLSearchParams(window.location.search);
+                const nextUrl = params.get('next');
+                if (nextUrl && nextUrl.startsWith('/')) {
+                    window.location.href = nextUrl;
+                } else if (data.user && data.user.role === 'admin') {
+                    window.location.href = '/admin.html';
+                } else {
+                    window.location.href = '/app';
+                }
             } catch (err) {
                 errorMsgEl.innerText = 'Lỗi kết nối đến máy chủ.';
                 console.error(err);

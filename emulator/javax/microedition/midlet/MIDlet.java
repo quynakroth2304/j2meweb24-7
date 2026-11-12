@@ -1,9 +1,10 @@
 package javax.microedition.midlet;
-import javax.microedition.lcdui.Display;
+
 import java.util.HashMap;
+import javax.microedition.lcdui.Display;
 
 public abstract class MIDlet {
-    public static HashMap<String, String> properties = new HashMap<String, String>();
+    public static HashMap<String, String> properties;
     private Display display;
 
     protected MIDlet() {
@@ -11,24 +12,40 @@ public abstract class MIDlet {
         System.out.println("Create MIDlet");
     }
 
-    public final int checkPermission(String permission) { return -1; }
-    protected abstract void destroyApp(boolean unconditional) throws MIDletStateChangeException;
-    public String getAppProperty(String key) { return properties != null ? properties.get(key) : null; }
-    public static void initAppProperties(HashMap<String, String> props) { properties = props; }
-
-    public final void notifyDestroyed() {
-        System.out.println("[VM-CLOUD] MIDlet goi notifyDestroyed() -> Bo qua de giu may ao 24/7 luon chay!");
+    public final int checkPermission(String permission) {
+        System.out.println("checkPermission: " + permission);
+        return -1;
     }
 
-    public final void notifyPaused() {}
+    protected abstract void destroyApp(boolean unconditional) throws MIDletStateChangeException;
+
+    public String getAppProperty(String key) {
+        return properties != null ? properties.get(key) : null;
+    }
+
+    public static void initAppProperties(HashMap<String, String> initProperties) {
+        properties = initProperties;
+    }
+
+    public final void notifyDestroyed() {
+        System.err.println("[MIDlet] Đã chặn lệnh notifyDestroyed() để giữ cửa sổ Game PC / Máy ảo 24/7 không bị tự tắt.");
+    }
+
+    public final void notifyPaused() {
+    }
+
     protected abstract void pauseApp();
 
-    public final boolean platformRequest(String url) {
-        System.out.println("OPEN_URL:" + url);
+    public final boolean platformRequest(String URL) {
         return false;
     }
 
-    public final void resumeRequest() {}
+    public final void resumeRequest() {
+    }
+
     protected abstract void startApp() throws MIDletStateChangeException;
-    public Display getDisplay() { return this.display; }
+
+    public Display getDisplay() {
+        return this.display;
+    }
 }

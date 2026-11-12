@@ -1,5 +1,7 @@
 package javax.microedition.io;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -10,6 +12,8 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -52,6 +56,7 @@ public class Connector {
         if (name == null) {
             throw new IllegalArgumentException("URL không được null");
         }
+        System.err.println("[Connector] open " + name);
         if (name.startsWith("socket://")) {
             String target = name.substring("socket://".length());
             int semiIdx = target.indexOf(';');
@@ -107,25 +112,81 @@ public class Connector {
         return openDataOutputStream(name);
     }
 
-    private static class ProxyHttpConnection implements InputConnection, OutputConnection {
-        private final HttpURLConnection conn;
+    public static class ProxyHttpConnection implements HttpConnection, ContentConnection, StreamConnection, InputConnection, OutputConnection, Connection {
+        private final String urlStr;
+        private final URL url;
+        private HttpURLConnection conn;
+        private String method = "GET";
+        private final Map<String, String> reqProps = new LinkedHashMap<>();
+        private ByteArrayOutputStream postBuf;
+        private boolean connected = false;
+        private byte[] cachedBody = null;
+        private int cachedResponseCode = -1;
 
-        ProxyHttpConnection(String urlStr) throws IOException {
-            URL url = new URL(urlStr);
-            this.conn = (HttpURLConnection) url.openConnection();
+        public ProxyHttpConnection(String urlStr) throws IOException {
+            this.urlStr = urlStr;
+            this.url = new URL(urlStr);
+            this.reqProps.put("User-Agent", "Profile/MIDP-2.0 Configuration/CLDC-1.1");
+        }
+
+        private synchronized void ensureConnected() throws IOException {
+            if (this.connected && this.conn != null) {
+                return;
+            }
+            this.connected = true;
+            this.conn = (HttpURLConnection) this.url.openConnection();
             this.conn.setConnectTimeout(10000);
             this.conn.setReadTimeout(10000);
-            this.conn.setRequestProperty("User-Agent", "Profile/MIDP-2.0 Configuration/CLDC-1.1");
+            this.conn.setInstanceFollowRedirects(true);
+            this.conn.setRequestMethod(this.method != null ? this.method : "GET");
+            for (Map.Entry<String, String> entry : this.reqProps.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    this.conn.setRequestProperty(entry.getKey(), entry.getValue());
+                }
+            }
             this.conn.setDoInput(true);
+            if (this.postBuf != null && this.postBuf.size() > 0) {
+                this.conn.setDoOutput(true);
+                byte[] data = this.postBuf.toByteArray();
+                try (OutputStream os = this.conn.getOutputStream()) {
+                    os.write(data);
+                    os.flush();
+                }
+            }
+            try {
+                this.cachedResponseCode = this.conn.getResponseCode();
+            } catch (IOException e) {
+                this.cachedResponseCode = -1;
+                throw e;
+            }
+            try (InputStream rawIn = (this.cachedResponseCode >= 400)
+                    ? this.conn.getErrorStream()
+                    : this.conn.getInputStream()) {
+                if (rawIn != null) {
+                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    byte[] buf = new byte[4096];
+                    int n;
+                    while ((n = rawIn.read(buf)) > 0) {
+                        bos.write(buf, 0, n);
+                    }
+                    this.cachedBody = bos.toByteArray();
+                } else {
+                    this.cachedBody = new byte[0];
+                }
+            } catch (Throwable ignored) {
+                if (this.cachedBody == null) {
+                    this.cachedBody = new byte[0];
+                }
+            }
         }
 
         @Override
         public InputStream openInputStream() {
             try {
-                return this.conn.getInputStream();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+                ensureConnected();
+            } catch (IOException ignored) {
             }
+            return new ByteArrayInputStream(this.cachedBody != null ? this.cachedBody : new byte[0]);
         }
 
         @Override
@@ -135,12 +196,10 @@ public class Connector {
 
         @Override
         public OutputStream openOutputStream() {
-            try {
-                this.conn.setDoOutput(true);
-                return this.conn.getOutputStream();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+            if (this.postBuf == null) {
+                this.postBuf = new ByteArrayOutputStream();
             }
+            return this.postBuf;
         }
 
         @Override
@@ -150,14 +209,215 @@ public class Connector {
 
         @Override
         public void close() {
-            this.conn.disconnect();
+            if (this.conn != null) {
+                try {
+                    this.conn.disconnect();
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+
+        @Override
+        public String getURL() {
+            return this.urlStr;
+        }
+
+        @Override
+        public String getProtocol() {
+            return this.url.getProtocol();
+        }
+
+        @Override
+        public String getHost() {
+            return this.url.getHost();
+        }
+
+        @Override
+        public String getFile() {
+            return this.url.getFile();
+        }
+
+        @Override
+        public String getRef() {
+            return this.url.getRef();
+        }
+
+        @Override
+        public String getQuery() {
+            return this.url.getQuery();
+        }
+
+        @Override
+        public int getPort() {
+            int p = this.url.getPort();
+            return p != -1 ? p : this.url.getDefaultPort();
+        }
+
+        @Override
+        public String getRequestMethod() {
+            return this.method;
+        }
+
+        @Override
+        public void setRequestMethod(String method) {
+            if (method != null && !method.trim().isEmpty()) {
+                this.method = method.trim().toUpperCase();
+            }
+        }
+
+        @Override
+        public String getRequestProperty(String key) {
+            return key != null ? this.reqProps.get(key) : null;
+        }
+
+        @Override
+        public void setRequestProperty(String key, String value) {
+            if (key != null && value != null) {
+                this.reqProps.put(key, value);
+            }
+        }
+
+        @Override
+        public int getResponseCode() {
+            try {
+                ensureConnected();
+                if (this.cachedResponseCode == 200 && (this.cachedBody == null || this.cachedBody.length == 0)) {
+                    return 204;
+                }
+                return this.cachedResponseCode;
+            } catch (Exception e) {
+                return -1;
+            }
+        }
+
+        @Override
+        public String getResponseMessage() {
+            try {
+                ensureConnected();
+                return this.conn != null ? this.conn.getResponseMessage() : "";
+            } catch (Exception e) {
+                return "";
+            }
+        }
+
+        @Override
+        public long getExpiration() {
+            try {
+                ensureConnected();
+                return this.conn != null ? this.conn.getExpiration() : 0L;
+            } catch (Exception e) {
+                return 0L;
+            }
+        }
+
+        @Override
+        public long getDate() {
+            try {
+                ensureConnected();
+                return this.conn != null ? this.conn.getDate() : 0L;
+            } catch (Exception e) {
+                return 0L;
+            }
+        }
+
+        @Override
+        public long getLastModified() {
+            try {
+                ensureConnected();
+                return this.conn != null ? this.conn.getLastModified() : 0L;
+            } catch (Exception e) {
+                return 0L;
+            }
+        }
+
+        @Override
+        public String getHeaderField(String name) {
+            try {
+                ensureConnected();
+                return this.conn != null ? this.conn.getHeaderField(name) : null;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        @Override
+        public String getHeaderField(int n) {
+            try {
+                ensureConnected();
+                return this.conn != null ? this.conn.getHeaderField(n) : null;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        @Override
+        public String getHeaderFieldKey(int n) {
+            try {
+                ensureConnected();
+                return this.conn != null ? this.conn.getHeaderFieldKey(n) : null;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        @Override
+        public int getHeaderFieldInt(String name, int def) {
+            try {
+                ensureConnected();
+                return this.conn != null ? this.conn.getHeaderFieldInt(name, def) : def;
+            } catch (Exception e) {
+                return def;
+            }
+        }
+
+        @Override
+        public long getHeaderFieldDate(String name, long def) {
+            try {
+                ensureConnected();
+                return this.conn != null ? this.conn.getHeaderFieldDate(name, def) : def;
+            } catch (Exception e) {
+                return def;
+            }
+        }
+
+        @Override
+        public String getType() {
+            try {
+                ensureConnected();
+                return this.conn != null ? this.conn.getContentType() : null;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        @Override
+        public String getEncoding() {
+            try {
+                ensureConnected();
+                return this.conn != null ? this.conn.getContentEncoding() : null;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        @Override
+        public long getLength() {
+            try {
+                ensureConnected();
+                if (this.cachedBody != null && this.cachedBody.length > 0) {
+                    return this.cachedBody.length;
+                }
+                return this.conn != null ? this.conn.getContentLengthLong() : -1L;
+            } catch (Exception e) {
+                return -1L;
+            }
         }
     }
 
-    private static class RealSocketConnection implements SocketConnection {
+    public static class RealSocketConnection implements SocketConnection {
         private final Socket socket;
 
-        RealSocketConnection(String host, int port) throws IOException {
+        public RealSocketConnection(String host, int port) throws IOException {
             this.socket = new Socket();
             this.socket.setTcpNoDelay(true);
             this.socket.setKeepAlive(true);
@@ -232,13 +492,13 @@ public class Connector {
         }
     }
 
-    private static class WebSocketRelayConnection implements SocketConnection {
+    public static class WebSocketRelayConnection implements SocketConnection {
         private final String host;
         private final int port;
         private final int connId;
         private volatile boolean closed = false;
 
-        WebSocketRelayConnection(String host, int port) throws IOException {
+        public WebSocketRelayConnection(String host, int port) throws IOException {
             this.host = host;
             this.port = port;
             this.connId = jsSocketOpen(host, port);
